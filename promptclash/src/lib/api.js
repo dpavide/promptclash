@@ -184,7 +184,11 @@ export async function fetchResponsesForGame(gameId) {
     const { data: responses, error } = await supabase
         .from('responses')
         .select('*')
+<<<<<<< Updated upstream
         .eq('gameid', gameId);
+=======
+        .eq('game_id', gameId);
+>>>>>>> Stashed changes
 
     if (error) {
         console.error('Error fetching responses:', error);
@@ -194,6 +198,7 @@ export async function fetchResponsesForGame(gameId) {
     return responses;
 }
 
+<<<<<<< Updated upstream
 
 export async function voteForResponse(responseId) {
     // Fetch the current votes
@@ -223,6 +228,23 @@ export async function voteForResponse(responseId) {
 
     console.log(`Vote recorded for response ID: ${responseId}`);
 }
+=======
+export async function voteForResponse(responseId, userId, gameId) {
+    const { error } = await supabase
+        .from('votes')
+        .insert([{ response_id: responseId, user_id: userId, game_id: gameId }]);
+
+    if (error) {
+        console.error('Error casting vote:', error);
+        return { error: 'Error submitting vote' };
+    }
+
+    console.log(`User ${userId} voted for response ${responseId}`);
+}
+
+
+
+>>>>>>> Stashed changes
 
 
 export function subscribeToVotes(gameId, onUpdate) {
@@ -230,7 +252,11 @@ export function subscribeToVotes(gameId, onUpdate) {
         .channel('votes')
         .on(
             'postgres_changes',
+<<<<<<< Updated upstream
             { event: 'UPDATE', schema: 'public', table: 'responses', filter: `gameid=eq.${gameId}` },
+=======
+            { event: 'UPDATE', schema: 'public', table: 'responses', filter: `game_id=eq.${gameId}` },
+>>>>>>> Stashed changes
             (payload) => {
                 console.log('Vote updated:', payload.new);
                 onUpdate(payload.new); // Call the callback with the updated response
