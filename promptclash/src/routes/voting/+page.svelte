@@ -94,7 +94,14 @@
         {/each}
     </ul>
 {:else}
-    <p>Loading responses...</p>
+<ul>
+    {#each responses as response}
+        <li>
+            <p>{response.response}</p>
+            <p>Votes: {response.vote_count || 0}</p>
+        </li>
+    {/each}
+</ul>
 {/if}
 
 
