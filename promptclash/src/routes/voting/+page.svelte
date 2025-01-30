@@ -1,13 +1,13 @@
-
 <script>
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { supabase } from '$lib/supabaseClient';
     import { voteForResponse } from '$lib/api';
 
     let responses = [];
     let userId = null;
     let gameId = null;
-    let hasVoted = false; // Track if user has already voted
+    let hasVoted = false;
+    let votesSubscription = null; // Store our realtime subscription
 
     async function fetchResponses() {
         const { data, error } = await supabase
@@ -30,8 +30,6 @@
         }
     }
 
-    let userHasVoted = new Map(); // Track votes per user
-
     async function checkIfUserVoted() {
         if (!userId || !gameId) return;
 
@@ -42,24 +40,42 @@
             .eq('game_id', gameId)
             .maybeSingle();
 
-        if (!error && data) {
-            userHasVoted.set(userId, true); // ✅ Only store this user's vote status
-        } else {
-            userHasVoted.set(userId, false);
-        }
+        hasVoted = !error && !!data;
     }
 
     async function handleVote(responseId) {
-        if (hasVoted) return; // Prevent clicking again
+        if (hasVoted) return;
 
         try {
             await voteForResponse(responseId, userId, gameId);
-            hasVoted = true; // ✅ Hide buttons after voting
+            hasVoted = true;
         } catch (error) {
             console.error('Error voting:', error);
         }
     }
 
+    function setupRealtimeSubscription() {
+        // Subscribe to votes table changes for this game
+        votesSubscription = supabase
+            .channel('game-votes')
+            .on('postgres_changes', {
+                event: '*', // Listen for all changes
+                schema: 'public',
+                table: 'votes',
+                filter: `game_id=eq.${gameId}`
+            }, () => {
+                // Refresh responses when any vote changes
+                fetchResponses();
+            })
+            .subscribe();
+
+        // Return cleanup function
+        return () => {
+            if (votesSubscription) {
+                supabase.removeChannel(votesSubscription);
+            }
+        };
+    }
 
     onMount(async () => {
         const { data: sessionData } = await supabase.auth.getSession();
@@ -75,7 +91,11 @@
         if (!gameError) {
             gameId = latestGame.id;
             await fetchResponses();
-            await checkIfUserVoted(); // Check if user has already voted
+            await checkIfUserVoted();
+            const cleanup = setupRealtimeSubscription();
+            
+            // Cleanup subscription when component is destroyed
+            onDestroy(cleanup);
         } else {
             console.error('Error fetching current game:', gameError);
         }
@@ -88,22 +108,17 @@
             <li>
                 <p>{response.response}</p>
                 <p>Votes: {response.vote_count || 0}</p>
-
                 <button on:click={() => handleVote(response.id)}>Vote</button>
             </li>
         {/each}
     </ul>
 {:else}
-<ul>
-    {#each responses as response}
-        <li>
-            <p>{response.response}</p>
-            <p>Votes: {response.vote_count || 0}</p>
-        </li>
-    {/each}
-</ul>
+    <ul>
+        {#each responses as response}
+            <li>
+                <p>{response.response}</p>
+                <p>Votes: {response.vote_count || 0}</p>
+            </li>
+        {/each}
+    </ul>
 {/if}
-
-
-
-
