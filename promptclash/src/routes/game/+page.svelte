@@ -68,11 +68,7 @@
 
             // Insert the response into the responses table
             const { error: insertError } = await supabase.from('responses').insert([
-<<<<<<< Updated upstream
-                { gameid: gameId, playerid: userId, text:response }
-=======
                 { game_id: gameId, player_id: userId, text:response }
->>>>>>> Stashed changes
             ]);
 
             if (insertError) {

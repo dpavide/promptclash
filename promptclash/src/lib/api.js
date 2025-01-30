@@ -184,11 +184,7 @@ export async function fetchResponsesForGame(gameId) {
     const { data: responses, error } = await supabase
         .from('responses')
         .select('*')
-<<<<<<< Updated upstream
-        .eq('gameid', gameId);
-=======
         .eq('game_id', gameId);
->>>>>>> Stashed changes
 
     if (error) {
         console.error('Error fetching responses:', error);
@@ -198,37 +194,6 @@ export async function fetchResponsesForGame(gameId) {
     return responses;
 }
 
-<<<<<<< Updated upstream
-
-export async function voteForResponse(responseId) {
-    // Fetch the current votes
-    const { data, error: fetchError } = await supabase
-        .from('responses')
-        .select('votes')
-        .eq('id', responseId)
-        .single();
-
-    if (fetchError) {
-        console.error('Error fetching current votes:', fetchError);
-        throw fetchError;
-    }
-
-    const currentVotes = data.votes || 0;
-
-    // Update the votes
-    const { error: updateError } = await supabase
-        .from('responses')
-        .update({ votes: currentVotes + 1 })
-        .eq('id', responseId);
-
-    if (updateError) {
-        console.error('Error updating votes:', updateError);
-        throw updateError;
-    }
-
-    console.log(`Vote recorded for response ID: ${responseId}`);
-}
-=======
 export async function voteForResponse(responseId, userId, gameId) {
     const { error } = await supabase
         .from('votes')
@@ -243,20 +208,12 @@ export async function voteForResponse(responseId, userId, gameId) {
 }
 
 
-
->>>>>>> Stashed changes
-
-
 export function subscribeToVotes(gameId, onUpdate) {
     const subscription = supabase
         .channel('votes')
         .on(
             'postgres_changes',
-<<<<<<< Updated upstream
-            { event: 'UPDATE', schema: 'public', table: 'responses', filter: `gameid=eq.${gameId}` },
-=======
             { event: 'UPDATE', schema: 'public', table: 'responses', filter: `game_id=eq.${gameId}` },
->>>>>>> Stashed changes
             (payload) => {
                 console.log('Vote updated:', payload.new);
                 onUpdate(payload.new); // Call the callback with the updated response
