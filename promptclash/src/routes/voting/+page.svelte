@@ -6,7 +6,7 @@
     let responses = [];
     let userId = null;
     let gameId = null;
-    let hasVoted = false;
+    let hasVoted = false; // Tracks if user has voted
     let votesSubscription = null; // Store our realtime subscription
 
     async function fetchResponses() {
