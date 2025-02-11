@@ -7,6 +7,7 @@
   let gameId = null;
   let hasVoted = false; // Tracks if user has voted
   let votesSubscription = null; // Store our realtime subscription
+  
   async function fetchResponses() {
     const { data, error } = await supabase
       .from("responses")
@@ -63,6 +64,20 @@
           // Refresh responses when any vote changes
           fetchResponses();
         }
+      )
+      .on(
+        "postgres_changes",
+                {
+                event: "*", // Listen for all changes
+                schema: "public",
+                table: "responses",
+                filter: `game_id=eq.${gameId}`,
+                },
+                () => {
+                // Refresh responses when any vote changes
+                fetchResponses();
+                }
+
       )
       .subscribe();
     // Return cleanup function
