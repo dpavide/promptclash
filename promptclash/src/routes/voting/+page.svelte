@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { supabase } from "$lib/supabaseClient";
   import { voteForResponse } from "$lib/api";
+  import { goto } from '$app/navigation';
   let responses = [];
   let userId = null;
   let gameId = null;
@@ -42,8 +43,13 @@
   async function handleVote(responseId) {
     if (hasVoted) return;
     try {
-      await voteForResponse(responseId, userId, gameId);
+      const result = await voteForResponse(responseId, userId, gameId);
       hasVoted = true;
+
+      if (result?.allVoted) {
+        goto('/winner');
+      }
+
     } catch (error) {
       console.error("Error voting:", error);
     }

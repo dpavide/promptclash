@@ -195,7 +195,7 @@ export async function fetchResponsesForGame(gameId) {
 }
 
 export async function voteForResponse(responseId, userId, gameId) {
-
+    console.log('vote for response called');
     // first add vote to votes table
     const { error } = await supabase
         .from('votes')
@@ -212,6 +212,8 @@ export async function voteForResponse(responseId, userId, gameId) {
         .update({voted:true})
         .eq('id', userId);
 
+    console.log('check at this point to see if the player voted database has been updated')
+
     if (updateError) {
         console.error('Error updating voting status of player', updateError);
         return { error: 'Error updating voting status'}
@@ -225,12 +227,16 @@ export async function voteForResponse(responseId, userId, gameId) {
         .select('voted')
         .eq('game_id', gameId);
 
+    console.log('player vote statuses should have been gotten');
+    console.log(players);
+
     if (countError) {
         console.error('Error counting the votes', countError);
         return { error: 'Error counting votes' };
     }
 
     const allVoted = players.every(player => player.voted);
+    console.log('all voted?', allVoted);
     if (allVoted) {
         console.log('All players have voted');
         return {allVoted: true};
