@@ -1,4 +1,5 @@
 import { supabase } from '$lib/supabaseClient';
+import { on } from 'svelte/events';
 
 let initialized = false;
 
@@ -181,18 +182,23 @@ export async function fetchPromptForCurrentGame() {
 }
 
 export async function fetchResponsesForGame(gameId) {
-    const { data: responses, error } = await supabase
+    const { data, error } = await supabase
         .from('responses')
-        .select('*')
+        .select('id, text, votes:votes(count)')
         .eq('game_id', gameId);
 
     if (error) {
         console.error('Error fetching responses:', error);
-        throw error;
+        return [];
     }
-
-    return responses;
-}
+    //Mapping responses to a simpler structure
+    return data.map((r) => ({
+        id: r.id, // Keep the same 'id' from the database row
+        response: r.text, // Rename 'text' to 'response' for clarity in our front-end
+        vote_count: r.votes ? r.votes[0].count : 0, // 'votes' is an array containing an object like { count: number }.
+        // If 'votes' exists, we use votes[0].count; otherwise, default to 0.
+      }));
+    }
 
 export async function voteForResponse(responseId, userId, gameId) {
     console.log('vote for response called');
@@ -220,7 +226,12 @@ export async function voteForResponse(responseId, userId, gameId) {
     }
 
     console.log(`User ${userId} voted for response ${responseId}`);
+    // Now check if all players have voted; return that flag
+    const allVoted = await checkAllVoted(gameId);
+    return { allVoted };
+}
 
+export async function checkAllVoted (gameId) {
     // check if all players have voted
     const {data:players, error:countError} = await supabase
         .from('profiles')
@@ -237,25 +248,89 @@ export async function voteForResponse(responseId, userId, gameId) {
 
     const allVoted = players.every(player => player.voted);
     console.log('all voted?', allVoted);
-    if (allVoted) {
-        console.log('All players have voted');
-        return {allVoted: true};
-    } else {
-        return {allVoted: false};
-    }
-
+    return allVoted;
 }
-
+export async function calculateGameScores(gameId) {
+    // Fetch votes for the game from the 'votes' table.
+    const { data: votes, error: votesError } = await supabase
+      .from('votes')
+      .select('response_id')
+      .eq('game_id', gameId);
+    if (votesError) throw votesError;
+  
+    // Tally the votes for each response.
+    const voteCounts = {};
+    votes.forEach(vote => {
+      voteCounts[vote.response_id] = (voteCounts[vote.response_id] || 0) + 1;
+    });
+  
+    // Fetch responses for the game to know which player submitted which response.
+    const { data: responses, error: responsesError } = await supabase
+      .from('responses')
+      .select('id, player_id')
+      .eq('game_id', gameId);
+    if (responsesError) throw responsesError;
+  
+    let winningPlayer = null; // Will hold the player_id of the winning response.
+    let maxVotes = 0;         // Highest vote count.
+    let runnerUpVotes = 0;    // Second highest vote count.
+  
+    // Loop through each response to find the winning one.
+    responses.forEach(response => {
+      const count = voteCounts[response.id] || 0;
+      if (count > maxVotes) {
+        runnerUpVotes = maxVotes; // Update runner-up before setting new max.
+        maxVotes = count;
+        winningPlayer = response.player_id;
+      } else if (count > runnerUpVotes) {
+        runnerUpVotes = count;
+      }
+    });
+  
+    // Calculate the bonus points.
+    const difference = maxVotes - runnerUpVotes;
+    const points = difference * 100;
+  
+    // If there is a winning player and bonus points to award, update their score.
+    if (winningPlayer && points > 0) {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('score')
+        .eq('id', winningPlayer)
+        .single();
+      if (profileError) throw profileError;
+      const currentScore = profileData.score || 0;
+      const newScore = currentScore + points;
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ score: newScore })
+        .eq('id', winningPlayer);
+      if (updateError) throw updateError;
+  
+      // Log the score update (minimal logging)
+      console.log(`Score updated for player ${winningPlayer}: +${points} points`);
+      return { winningPlayer, points, voteCounts };
+    }
+    
+    console.log("No score update necessary.");
+    return { winningPlayer, points, voteCounts };
+  }
 
 export function subscribeToVotes(gameId, onUpdate) {
     const subscription = supabase
         .channel('votes')
         .on(
             'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'responses', filter: `game_id=eq.${gameId}` },
-            (payload) => {
-                console.log('Vote updated:', payload.new);
-                onUpdate(payload.new); // Call the callback with the updated response
+            { 
+                event: '*', 
+                schema: 'public', 
+                table: 'votes', 
+                filter: `game_id=eq.${gameId}` 
+            },
+            async () => {
+                console.log('Votes updated, refreshing responses');
+                const updatedResponses = await fetchResponsesForGame(gameId);
+                onUpdate(updatedResponses);
             }
         )
         .subscribe();
@@ -278,4 +353,74 @@ export async function fetchCurrentGameId() {
     }
 
     return latestGame.id;
+
 }
+
+export async function fetchWinningResponse(gameId) {
+    let responses = [];
+    const { data, error } = await supabase
+      .from("responses")
+      .select(
+        `
+                id,
+                text,
+                player_id,
+                game_id,
+                votes:votes(count)
+            `
+      )
+      .eq("game_id", gameId);
+    if (error) {
+      console.error("Error fetching responses:", error);
+      return null;
+    } 
+
+    responses = data.map((response) => ({
+    id: response.id,
+    response: response.text,
+    vote_count: response.votes ? response.votes[0].count : 0,
+    player_id: response.player_id
+    }));
+    
+    console.log("Responses are:", responses);
+
+    if (responses.length === 0){
+        return null;
+    }
+
+    if (responses.length > 0) {
+        // Determine winner
+        let winningResponse = responses.reduce(
+            (max, response) => response.vote_count > max.vote_count ? response : max, 
+            responses[0]
+        );
+
+        // If there are only 1 or 2 responses, losingResponse might not exist
+        let losingResponse = responses.find(r => r.id !== winningResponse.id) || { vote_count: 0 };
+
+        // Fetch player usernames
+        const { data: winnerProfile } = await supabase
+            .from("profiles")
+            .select("username")
+            .eq("id", winningResponse.player_id)
+            .single();
+        
+        const { data: loserProfile } = await supabase
+            .from("profiles")
+            .select("username")
+            .eq("id", losingResponse.player_id)
+            .single();
+
+        winningResponse.username = winnerProfile?.username || "Unknown";
+        winningResponse.pointsEarned = (winningResponse.vote_count - losingResponse.vote_count) * 100 + 
+        (winningResponse.vote_count > losingResponse.vote_count ? 50 : 0);
+
+        losingResponse.username = loserProfile?.username || "Unknown";
+        losingResponse.pointsEarned = losingResponse.vote_count * 100;
+
+        return { winningResponse, losingResponse };
+    }
+
+    return null;
+
+  }
