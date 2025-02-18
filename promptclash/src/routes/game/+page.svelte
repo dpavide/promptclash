@@ -6,6 +6,8 @@
   let prompt = null; // The current prompt
   let response = ""; // The user's response
   let currentGameId = null; // The current game ID
+  let errorMessage = "";
+  let successMessage = "";
 
   onMount(async () => {
     try {
@@ -51,7 +53,7 @@
       const { data: user, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
         console.error("No user is signed in:", userError);
-        alert("You must be logged in to submit a response.");
+        errorMessage = "You must be logged in to submit a response.";
         return;
       }
 
@@ -68,24 +70,33 @@
 
       if (insertError) {
         console.error("Error submitting response:", insertError);
-        alert("Failed to submit response. Please try again.");
+        errorMessage = "Failed to submit response. Please try again.";
       } else {
-        alert("Response submitted successfully!");
+        successMessage = "Response submitted successfully!";
         response = ""; // Clear the input field
         goto("/voting"); // Redirect to the voting page
       }
     } catch (error) {
       console.error("Error in submitResponse:", error);
-      alert("An error occurred. Please try again.");
+      errorMessage = "An error occurred. Please try again.";
     }
   }
 </script>
 
 <h1>Game</h1>
 
+<!-- Display any messages to the user (non-blocking) -->
+{#if errorMessage}
+  <p style="color: red;">{errorMessage}</p>
+{/if}
+{#if successMessage}
+  <p style="color: green;">{successMessage}</p>
+{/if}
+
 {#if prompt}
   <p>Prompt: {prompt.text}</p>
-  <textarea bind:value={response} placeholder="Type your response here..."
+  <textarea bind:value={response} 
+  placeholder="Type your response here..."
   ></textarea>
   <button on:click={submitResponse}>Submit</button>
 {:else}

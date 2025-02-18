@@ -270,6 +270,66 @@ export async function calculateGameScores(gameId) {
       .select('id, player_id')
       .eq('game_id', gameId);
     if (responsesError) throw responsesError;
+
+    // Build a map of each player's total votes & store each player's response text
+    // e.g. playerVotes[playerId] = { totalVotes, responseText }
+  const playerVotes = {};
+  responses.forEach((r) => {
+    const count = voteCounts[r.id] || 0;
+    if (!playerVotes[r.player_id]) {
+      playerVotes[r.player_id] = {
+        totalVotes: 0,
+        responses: []
+      };
+    }
+    playerVotes[r.player_id].totalVotes += count;
+    playerVotes[r.player_id].responses.push({
+      text: r.text,
+      votes: count
+    });
+  });
+
+  // If exactly 2 players, check for a tie
+  const playerIds = Object.keys(playerVotes);
+  if (playerIds.length === 2) {
+    const [p1, p2] = playerIds;
+    const p1Votes = playerVotes[p1].totalVotes;
+    const p2Votes = playerVotes[p2].totalVotes;
+
+    if (p1Votes === p2Votes) {
+      // TIE SCENARIO: each player gets voteCount * 100, no bonus
+      const p1Points = p1Votes * 100;
+      const p2Points = p2Votes * 100;
+
+      // Update both players' scores in 'profiles'
+      const p1Profile = await updatePlayerScore(p1, p1Points);
+      const p2Profile = await updatePlayerScore(p2, p2Points);
+
+      console.log(
+        `Tie! Player ${p1} and Player ${p2} each got ${p1Points} points.`
+      );
+
+      return {
+        tie: true,
+        players: [
+          {
+            playerId: p1,
+            username: p1Profile.username,
+            votes: p1Votes,
+            points: p1Points,
+            responses: playerVotes[p1].responses
+          },
+          {
+            playerId: p2,
+            username: p2Profile.username,
+            votes: p2Votes,
+            points: p2Points,
+            responses: playerVotes[p2].responses
+          }
+        ]
+      };
+    }
+  }
   
     let winningPlayer = null; // Will hold the player_id of the winning response.
     let maxVotes = 0;         // Highest vote count.
@@ -293,32 +353,58 @@ export async function calculateGameScores(gameId) {
   
     // If there is a winning player and bonus points to award, update their score.
     if (winningPlayer && points > 0) {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('score')
-        .eq('id', winningPlayer)
-        .single();
-      if (profileError) throw profileError;
-      const currentScore = profileData.score || 0;
-      const newScore = currentScore + points;
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ score: newScore })
-        .eq('id', winningPlayer);
-      if (updateError) throw updateError;
-  
-      // Log the score update (minimal logging)
-      console.log(`Score updated for player ${winningPlayer}: +${points} points`);
-      return { winningPlayer, points, voteCounts };
+        if (winningPlayer && points > 0) {
+            const updatedProfile = await updatePlayerScore(winningPlayer, points);
+            console.log(
+              `Score updated for player ${winningPlayer}: +${points} points`
+            );
+        
+            return {
+              tie: false,
+              winningPlayer,
+              points,
+              username: updatedProfile.username, // so we can display name
+              maxVotes
+            };
+          }
+        
+          // If no winner or no difference
+          console.log('No score update necessary.');
+          return { tie: false, winningPlayer: null, points: 0, maxVotes: 0 };
     }
-    
-    console.log("No score update necessary.");
-    return { winningPlayer, points, voteCounts };
+}
+    //Moved scoring + player score logic to a helper function
+  async function updatePlayerScore(playerId, pointsToAdd) {
+    // 1. Fetch current score & username
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('score, username')
+      .eq('id', playerId)
+      .single();
+  
+    if (profileError) throw profileError;
+  
+    const currentScore = profileData.score || 0;
+    const newScore = currentScore + pointsToAdd;
+  
+    // 2. Update
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ score: newScore })
+      .eq('id', playerId);
+  
+    if (updateError) throw updateError;
+  
+    return {
+      ...profileData,
+      score: newScore
+    };
   }
 
 export function subscribeToVotes(gameId, onUpdate) {
-    const subscription = supabase
-        .channel('votes')
+    const channel = supabase.channel("game-changes");
+        // 1st listener for votes table
+        channel
         .on(
             'postgres_changes',
             { 
@@ -332,11 +418,29 @@ export function subscribeToVotes(gameId, onUpdate) {
                 const updatedResponses = await fetchResponsesForGame(gameId);
                 onUpdate(updatedResponses);
             }
-        )
-        .subscribe();
+        );
+        // 2nd listener for responses table
+        channel
+        .on(
+            "postgres_changes",
+        {
+            event: "*",
+            schema: "public",
+            table: "responses",
+            filter: `game_id=eq.${gameId}`
+        },
+        async () => {
+        console.log("Responses updated, refreshing responses");
+        const updatedResponses = await fetchResponsesForGame(gameId);
+        onUpdate(updatedResponses);
+            }
+        );
 
-    return () => supabase.removeChannel(subscription);
-}
+        channel.subscribe();
+
+        return () => {supabase.removeChannel(subscription);
+            };
+    }
 
 
 export async function fetchCurrentGameId() {
