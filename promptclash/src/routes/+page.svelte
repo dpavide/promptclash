@@ -1,17 +1,19 @@
 <script>
   import { supabase } from "$lib/supabaseClient";
   import { goto } from "$app/navigation";
+  import { initializeDatabase } from "$lib/api"; // Make sure this function creates a new game each time
 
   let username = "";
+  let roomCode = "";
 
-  async function handleAnonymousSignIn() {
+  // Create Room: Sign in, create a new game, add the user, and redirect.
+  async function handleCreateRoom() {
     if (!username.trim()) {
       alert("Please enter a username");
       return;
     }
-
     try {
-      // Perform anonymous sign-in
+      // Sign in anonymously
       const { data: authData, error: authError } =
         await supabase.auth.signInAnonymously();
       if (authError) {
@@ -20,51 +22,85 @@
         return;
       }
 
-      // Get or create the latest game
-      const { data: latestGame, error: gameError } = await supabase
-        .from("game")
-        .select("id")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
+      // Create a new game via your API (ensure initializeDatabase always creates a new game)
+      const newGameData = await initializeDatabase();
+      // Assuming initializeDatabase returns an array with the new game record as the first element.
+      const gameId = newGameData[0].id;
+      console.log("New game created with id:", gameId);
 
-      let gameId;
-      if (gameError || !latestGame) {
-        // Create a new game if none exists
-        const { data: newGame, error: newGameError } = await supabase
-          .from("game")
-          .insert([{}])
-          .select("id")
-          .single();
-
-        if (newGameError) {
-          console.error("Error creating new game:", newGameError);
-          alert("Failed to create a new game. Please try again.");
-          return;
-        }
-
-        gameId = newGame.id;
-      } else {
-        gameId = latestGame.id;
-      }
-
-      // Add the user to the profiles table (using the 'id' column)
-      const { error: profileError } = await supabase.from("profiles").upsert({
-        id: authData.user.id, // Use the user id from authentication
-        username: username.trim(),
-        game_id: gameId,
-      });
-
+      // Add the user to the new game
+      const { error: profileError } = await supabase.from("profiles").insert([
+        {
+          id: authData.user.id,
+          username: username.trim(),
+          game_id: gameId,
+        },
+      ]);
       if (profileError) {
-        console.error("Error adding user to profiles:", profileError);
+        console.error("Error adding user to game:", profileError);
         alert("Failed to join the game. Please try again.");
         return;
       }
-
-      // Redirect to the waiting room
-      goto("/waitingroom");
+      // Redirect to the waiting room with the gameId in the query string
+      goto(`/waitingroom?gameId=${gameId}`);
     } catch (error) {
-      console.error("Error in handleAnonymousSignIn:", error);
+      console.error("Error in handleCreateRoom:", error);
+      alert("An unexpected error occurred. Please try again.");
+    }
+  }
+
+  // Join Game: Validate room code, sign in, add the user to that game, and redirect.
+  async function handleJoinGame() {
+    if (!username.trim()) {
+      alert("Please enter a username");
+      return;
+    }
+    if (!roomCode.trim()) {
+      alert("Please enter a room code");
+      return;
+    }
+    try {
+      // Look up the game by its ID (the room code)
+      const { data: game, error } = await supabase
+        .from("game")
+        .select("id")
+        .eq("id", Number(roomCode.trim()))
+        .maybeSingle();
+      if (error) {
+        console.error("Error fetching game:", error);
+        alert("Error checking room code. Please try again.");
+        return;
+      }
+      if (!game) {
+        alert("Game does not exist!");
+        return;
+      }
+
+      // Sign in anonymously
+      const { data: authData, error: authError } =
+        await supabase.auth.signInAnonymously();
+      if (authError) {
+        console.error("Error during anonymous sign-in:", authError);
+        alert("Failed to sign in. Please try again.");
+        return;
+      }
+
+      // Add the user to the found game
+      const { error: profileError } = await supabase.from("profiles").insert([
+        {
+          id: authData.user.id,
+          username: username.trim(),
+          game_id: game.id,
+        },
+      ]);
+      if (profileError) {
+        console.error("Error adding user to game:", profileError);
+        alert("Failed to join the game. Please try again.");
+        return;
+      }
+      goto(`/waitingroom?gameId=${game.id}`);
+    } catch (error) {
+      console.error("Error in handleJoinGame:", error);
       alert("An unexpected error occurred. Please try again.");
     }
   }
@@ -96,24 +132,36 @@
       />
     </div>
 
-    <!-- Input and Button -->
     <div class="form-container">
-      <form on:submit|preventDefault={handleAnonymousSignIn}>
+      <!-- Name input -->
+      <input
+        type="text"
+        bind:value={username}
+        placeholder="Name"
+        class="name-input"
+        required
+      />
+
+      <!-- Join Game Section -->
+      <div class="join-section">
         <input
           type="text"
-          bind:value={username}
-          placeholder="Name"
-          class="name-input"
-          required
-        />
-        <input
-          type="text"
+          bind:value={roomCode}
           placeholder="Room Code"
           class="room-input"
           required
         />
-        <button type="submit" class="play-button">Play</button>
-      </form>
+        <button class="play-button" on:click={handleJoinGame}>
+          Join Game
+        </button>
+      </div>
+
+      <small>OR</small>
+
+      <!-- Create Room Button -->
+      <button class="play-button" on:click={handleCreateRoom}>
+        Create Room
+      </button>
     </div>
 
     <!-- Right Player Icons -->
