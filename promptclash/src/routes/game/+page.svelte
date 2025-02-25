@@ -10,41 +10,40 @@
   let successMessage = "";
 
   onMount(async () => {
-    try {
-      // Fetch the latest game to get the current game ID and prompt ID
-      const { data: latestGame, error: gameError } = await supabase
-        .from("game")
-        .select("id, prompt_id")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (gameError) {
-        console.error("Error fetching the latest game:", gameError);
-        goto("/waitingroom"); // Redirect if no game is found
-        return;
-      }
-
-      currentGameId = latestGame.id;
-
-      // Fetch the prompt for the current game
-      const { data: fetchedPrompt, error: promptError } = await supabase
-        .from("prompts")
-        .select("*")
-        .eq("id", latestGame.prompt_id)
-        .single();
-
-      if (promptError || !fetchedPrompt) {
-        console.error("Error fetching prompt:", promptError);
-        goto("/waitingroom"); // Redirect if no prompt is found
-        return;
-      }
-
-      prompt = fetchedPrompt;
-    } catch (error) {
-      console.error("Error loading prompt:", error);
-      goto("/waitingroom"); // Redirect on any unexpected error
+    // Get gameId from URL query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameIdParam = urlParams.get("gameId");
+    if (!gameIdParam) {
+      alert("Game ID not found. Redirecting to waiting room.");
+      goto("/waitingroom");
+      return;
     }
+    currentGameId = Number(gameIdParam);
+
+    // Fetch the game record using the passed game ID
+    const { data: gameData, error: gameError } = await supabase
+      .from("game")
+      .select("prompt_id")
+      .eq("id", currentGameId)
+      .single();
+    if (gameError || !gameData) {
+      alert("Game not found.");
+      goto("/waitingroom");
+      return;
+    }
+
+    // Fetch the prompt associated with the game
+    const { data: fetchedPrompt, error: promptError } = await supabase
+      .from("prompts")
+      .select("*")
+      .eq("id", gameData.prompt_id)
+      .single();
+    if (promptError || !fetchedPrompt) {
+      console.error("Error fetching prompt:", promptError);
+      goto("/waitingroom");
+      return;
+    }
+    prompt = fetchedPrompt;
   });
 
   async function submitResponse() {
@@ -74,7 +73,7 @@
       } else {
         successMessage = "Response submitted successfully!";
         response = ""; // Clear the input field
-        goto("/voting"); // Redirect to the voting page
+        goto(`/voting?gameId=${currentGameId}`); // Redirect to the voting page with gameId
       }
     } catch (error) {
       console.error("Error in submitResponse:", error);
@@ -95,8 +94,7 @@
 
 {#if prompt}
   <p>Prompt: {prompt.text}</p>
-  <textarea bind:value={response} 
-  placeholder="Type your response here..."
+  <textarea bind:value={response} placeholder="Type your response here..."
   ></textarea>
   <button on:click={submitResponse}>Submit</button>
 {:else}

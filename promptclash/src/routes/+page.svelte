@@ -1,7 +1,7 @@
 <script>
   import { supabase } from "$lib/supabaseClient";
   import { goto } from "$app/navigation";
-  import { initializeDatabase } from "$lib/api"; // Make sure this function creates a new game each time
+  // Notice: we no longer import initializeDatabase here
 
   let username = "";
   let roomCode = "";
@@ -22,9 +22,13 @@
         return;
       }
 
-      // Create a new game via your API (ensure initializeDatabase always creates a new game)
+      // Dynamically import the API so that initializeDatabase is only loaded and called when the button is pressed
+      const { initializeDatabase } = await import("$lib/api");
       const newGameData = await initializeDatabase();
-      // Assuming initializeDatabase returns an array with the new game record as the first element.
+      if (!newGameData || !newGameData[0]) {
+        alert("Failed to create game. Please try again.");
+        return;
+      }
       const gameId = newGameData[0].id;
       console.log("New game created with id:", gameId);
 
@@ -195,7 +199,6 @@
     margin: 0;
     padding: 0;
   }
-
   .container {
     display: flex;
     flex-direction: column;
@@ -204,13 +207,11 @@
     min-height: 100vh;
     background-color: #078fd8;
   }
-
   .header h1 {
     font-size: 3em;
     color: white;
     text-shadow: 2px 2px 5px black;
   }
-
   .main-content {
     display: flex;
     align-items: center;
@@ -218,7 +219,6 @@
     width: 80%;
     max-width: 900px;
   }
-
   .left-players,
   .right-players {
     display: flex;
@@ -226,12 +226,10 @@
     gap: 15px;
     padding: 15px;
   }
-
   .player {
     width: 80px;
     height: auto;
   }
-
   .form-container {
     display: flex;
     flex-direction: column;
@@ -242,7 +240,6 @@
     border-radius: 10px;
     border: 2px solid #ccc;
   }
-
   .name-input,
   .room-input {
     padding: 10px;
@@ -252,7 +249,6 @@
     width: 200px;
     outline: none;
   }
-
   .play-button {
     padding: 10px 20px;
     font-size: 1.2em;
@@ -262,7 +258,6 @@
     border-radius: 5px;
     cursor: pointer;
   }
-
   .play-button:hover {
     background-color: #0056b3;
   }

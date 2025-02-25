@@ -69,7 +69,8 @@
         },
         (payload) => {
           if (payload.new.prompt_id) {
-            goto("/game");
+            // Pass gameId in the URL when redirecting
+            goto(`/game?gameId=${currentGame.id}`);
           }
         }
       )
