@@ -1,26 +1,27 @@
-<script>
+<script lang="ts">
   import { supabase } from "$lib/supabaseClient";
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
 
   let currentGame;
-  let players = [];
+  let players: { username: string }[] = [];
   let gameId;
 
   onMount(async () => {
     // Get gameId from the URL query parameters
     const urlParams = new URLSearchParams(window.location.search);
-    gameId = urlParams.get("gameId");
-    if (!gameId) {
+    const gameIdParam = urlParams.get("gameId");
+    if (!gameIdParam) {
       alert("No game specified.");
       return;
     }
+    gameId = Number(gameIdParam);
 
     // Fetch the game record by its ID
     const { data: gameData, error: gameError } = await supabase
       .from("game")
       .select("*")
-      .eq("id", Number(gameId))
+      .eq("id", gameId)
       .single();
     if (gameError || !gameData) {
       alert("Game not found.");
@@ -50,11 +51,11 @@
       .subscribe();
 
     // Initial fetch of players
-    const { data } = await supabase
+    const { data: initialPlayers } = await supabase
       .from("profiles")
       .select("username")
       .eq("game_id", currentGame.id);
-    players = data || [];
+    players = initialPlayers || [];
 
     // Listen for game updates (e.g. when a prompt is assigned)
     const gameChannel = supabase
@@ -83,7 +84,7 @@
   });
 
   async function startGame() {
-    if (!currentGame?.id || players.length < 2) {
+    if (players.length < 2) {
       alert("At least 2 players are required to start the game!");
       return;
     }

@@ -18,7 +18,12 @@
   async function fetchResponses() {
     if (!gameId) return;
     const data = await fetchResponsesForGame(gameId);
-    responses = data || [];
+    // Map each response: if the response text is empty, use "{no response given}"
+    responses = data.map(r => ({
+      ...r,
+       // Default text if empty
+      response: r.response && r.response.trim().length > 0 ? r.response : "{no response given}"
+    })) || [];
   }
 
   async function checkIfUserVoted() {
@@ -39,7 +44,7 @@
       hasVoted = true;
       if (result?.allVoted) {
         await calculateGameScores(gameId);
-        goto("/winner");
+        goto(`/winner?gameId=${gameId}`); //redirect for current gameId
       }
     } catch (error) {
       console.error("Error voting:", error);
@@ -53,24 +58,27 @@
 
     // Get gameId from URL query parameters
     const urlParams = new URLSearchParams(window.location.search);
-    const gameIdParam = urlParams.get("gameId");
-    if (!gameIdParam) {
+    const gameIdParameter = urlParams.get("gameId");
+    if (!gameIdParameter) {
       alert("Game ID not specified.");
       goto("/waitingroom");
       return;
     }
-    gameId = Number(gameIdParam);
+    gameId = Number(gameIdParameter);
 
     await fetchResponses();
     await checkIfUserVoted();
 
     const unsubscribe = subscribeToVotes(gameId, async (updatedResponses) => {
-      responses = updatedResponses;
+      responses = updatedResponses.map(r => ({
+        ...r,
+        response: r.response && r.response.trim().length > 0 ? r.response : "{no response given}" //adding the default response
+      }));
       // Check if all players have voted
       const allVoted = await checkAllVoted(gameId);
       if (allVoted) {
         await calculateGameScores(gameId);
-        goto("/winner");
+        goto(`/winner?gameId=${gameId}`);
       }
     });
     // Clean up subscription on component destruction
