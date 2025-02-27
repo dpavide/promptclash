@@ -1,8 +1,10 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { goto } from "$app/navigation";
     import { supabase } from '$lib/supabaseClient';
     import { fetchCurrentGameId, calculateGameScores, fetchWinningResponse } from '$lib/api';
 
+    let gameId = null;
     let losingResponse =  null;
     let winningResponse = null;
     let tie = false;
@@ -12,22 +14,27 @@
     let points = 0;
     let maxVotes = 0;
 
-    onMount(async () => { 
-        try {  
-            const gameId = await fetchCurrentGameId();
-            const result = await calculateGameScores(gameId);
-            if (result.tie) {
-        // Draw scenario
-        tie = true;
-        tiePlayers = result.players; // each has {playerId, username, votes, points, responses}
-      } else {
-        // Normal scenario
-        tie = false;
-        const winningResult = await fetchWinningResponse(gameId);
-        if (winningResult){
-            winningResponse = winningResult.winningResponse;
-            losingResponse = winningResult.losingResponse;
+    onMount(async () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const param = urlParams.get("gameId"); 
+        if (!param) {
+          alert("No game ID found.");
+          goto("/waitingroom");
+          return;  
         }
+        gameId = Number(param);
+
+        try{
+          const result = await calculateGameScores(gameId);
+        if (result.tie) {
+          tie = true;
+          tiePlayers = result.players;
+        } else {
+          tie = false;
+          winningPlayer = result.winningPlayer;
+          winningUsername = result.username;
+          points = result.points;
+          maxVotes = result.maxVotes;
       }
     } catch (err) {
       console.error("Error in winner page:", err);
@@ -53,7 +60,7 @@
   <!-- Normal winner scenario -->
   {#if winningResponse && losingResponse}
     <div>
-    <p><strong>{winningResponse.username}</strong>wins this round, with response:</p>
+    <p><strong>{winningResponse.username}</strong> wins this round, with response:</p>
     <h2>{winningResponse.response}</h2>
     <p>Votes: {winningResponse.vote_count}</p>
     <p>Points Earned: {winningResponse.pointsEarned}</p>
