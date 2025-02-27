@@ -14,16 +14,17 @@
   let userId = null;
   let gameId = null;
   let hasVoted = false; // Tracks if user has voted
+  let subscription; // Stores the subscription for cleanup
 
   async function fetchResponses() {
     if (!gameId) return;
     const data = await fetchResponsesForGame(gameId);
-    // Map each response: if the response text is empty, use "{no response given}"
-    responses = data.map(r => ({
-      ...r,
-       // Default text if empty
-      response: r.response && r.response.trim().length > 0 ? r.response : "{no response given}"
-    })) || [];
+    responses =
+      data.map((r) => ({
+        ...r,
+        response:
+          r.response?.trim().length > 0 ? r.response : "{no response given}",
+      })) || [];
   }
 
   async function checkIfUserVoted() {
@@ -34,6 +35,7 @@
       .eq("user_id", userId)
       .eq("game_id", gameId)
       .maybeSingle();
+
     hasVoted = !error && !!data;
   }
 
@@ -42,9 +44,10 @@
     try {
       const result = await voteForResponse(responseId, userId, gameId);
       hasVoted = true;
+
       if (result?.allVoted) {
         await calculateGameScores(gameId);
-        goto(`/winner?gameId=${gameId}`); //redirect for current gameId
+        goto(`/winner?gameId=${gameId}`);
       }
     } catch (error) {
       console.error("Error voting:", error);
@@ -69,11 +72,14 @@
     await fetchResponses();
     await checkIfUserVoted();
 
-    const unsubscribe = subscribeToVotes(gameId, async (updatedResponses) => {
-      responses = updatedResponses.map(r => ({
+    // Subscribe to votes
+    subscription = subscribeToVotes(gameId, async (updatedResponses) => {
+      responses = updatedResponses.map((r) => ({
         ...r,
-        response: r.response && r.response.trim().length > 0 ? r.response : "{no response given}" //adding the default response
+        response:
+          r.response?.trim().length > 0 ? r.response : "{no response given}",
       }));
+
       // Check if all players have voted
       const allVoted = await checkAllVoted(gameId);
       if (allVoted) {
@@ -81,8 +87,12 @@
         goto(`/winner?gameId=${gameId}`);
       }
     });
-    // Clean up subscription on component destruction
-    onDestroy(unsubscribe);
+  });
+
+  onDestroy(() => {
+    if (subscription && typeof subscription.unsubscribe === "function") {
+      subscription.unsubscribe();
+    }
   });
 </script>
 
