@@ -14,11 +14,10 @@ export async function initializeDatabase() {
     await assignPromptToGame(data[0].id);
     console.log('New game added successfully:', data[0].id);
   }
-
   return data;
 }
 
-// New function that requires explicit game ID
+// Function that requires explicit game ID
 export async function addUserToGame(username, authData, gameId) {
   if (!username) {
     throw new Error('Username is required');
@@ -116,7 +115,7 @@ export async function monitorPlayerCount(gameId, onReady, onPlayerCountChange) {
     )
     .subscribe();
 
-  return () => {
+    return () => {
     supabase.removeChannel(subscription);
   };
 }
@@ -236,6 +235,7 @@ export async function voteForResponse(responseId, userId, gameId) {
   }
 
   console.log(`User ${userId} voted for response ${responseId}`);
+
   const allVoted = await checkAllVoted(gameId);
   return { allVoted };
 }
@@ -243,7 +243,7 @@ export async function voteForResponse(responseId, userId, gameId) {
 export async function checkAllVoted(gameId) {
   const { data: players, error: countError } = await supabase
     .from('profiles')
-    .select('voted')
+    .select('*')
     .eq('game_id', gameId);
 
   if (countError) {
@@ -251,7 +251,7 @@ export async function checkAllVoted(gameId) {
     return { error: 'Error counting votes' };
   }
 
-  const allVoted = players.every(player => player.voted);
+  const allVoted = players.every((player) => player.voted);
   console.log('All voted?', allVoted);
   return allVoted;
 }
@@ -264,81 +264,153 @@ export async function calculateGameScores(gameId) {
   if (votesError) throw votesError;
 
   const voteCounts = {};
-  votes.forEach(vote => {
+  votes.forEach((vote) => {
     voteCounts[vote.response_id] = (voteCounts[vote.response_id] || 0) + 1;
   });
 
   const { data: responses, error: responsesError } = await supabase
     .from('responses')
-    .select('id, player_id')
+    .select('id, player_id, text')
     .eq('game_id', gameId);
   if (responsesError) throw responsesError;
 
   const playerVotes = {};
-  responses.forEach((r) => {
+  for (const r of responses){
     const count = voteCounts[r.id] || 0;
     if (!playerVotes[r.player_id]) {
       playerVotes[r.player_id] = { totalVotes: 0, responses: [] };
     }
     playerVotes[r.player_id].totalVotes += count;
     playerVotes[r.player_id].responses.push({ text: r.text, votes: count });
-  });
+  }
 
   const playerIds = Object.keys(playerVotes);
-  if (playerIds.length === 2) {
-    const [p1, p2] = playerIds;
-    const p1Votes = playerVotes[p1].totalVotes;
-    const p2Votes = playerVotes[p2].totalVotes;
+  if (playerIds.length === 0) {
+    console.log('No votes to calculate');
+    return { tie: false, winningPlayer: null, points: 0, maxVotes: 0 };
+  }
 
-    if (p1Votes === p2Votes) {
-      const p1Points = p1Votes * 100;
-      const p2Points = p2Votes * 100;
-      const p1Profile = await updatePlayerScore(p1, p1Points);
-      const p2Profile = await updatePlayerScore(p2, p2Points);
-
-      console.log(`Tie! Player ${p1} and Player ${p2} each got ${p1Points} points.`);
-      return {
-        tie: true,
-        players: [
-          { playerId: p1, username: p1Profile.username, votes: p1Votes, points: p1Points, responses: playerVotes[p1].responses },
-          { playerId: p2, username: p2Profile.username, votes: p2Votes, points: p2Points, responses: playerVotes[p2].responses }
-        ]
-      };
+  let maxTotalVotes = 0;
+  for (const pid of playerIds) {
+    if (playerVotes[pid].totalVotes > maxTotalVotes) {
+      maxTotalVotes = playerVotes[pid].totalVotes;
     }
   }
-  
-  let winningPlayer = null;
-  let maxVotes = 0;
-  let runnerUpVotes = 0;
-  responses.forEach(response => {
-    const count = voteCounts[response.id] || 0;
-    if (count > maxVotes) {
-      runnerUpVotes = maxVotes;
-      maxVotes = count;
-      winningPlayer = response.player_id;
-    } else if (count > runnerUpVotes) {
-      runnerUpVotes = count;
+
+  // Check how many players share that max total
+  const topPlayers = playerIds.filter(
+    (pid) => playerVotes[pid].totalVotes === maxTotalVotes
+  );
+
+  if (topPlayers.length > 1) {
+    // === TIE SCENARIO (multiple players share the top vote count) ===
+    const results = [];
+    for (const pid of playerIds) {
+      // You can choose whether all players get points or only top players
+      // Here, each player's totalVotes => points
+      const pointsToAdd = playerVotes[pid].totalVotes * 100;
+      const profile = await updatePlayerScore(pid, pointsToAdd);
+      results.push({
+        playerId: pid,
+        username: profile.username,
+        votes: playerVotes[pid].totalVotes,
+        points: pointsToAdd,
+        responses: playerVotes[pid].responses
+      });
     }
-  });
-  
-  const difference = maxVotes - runnerUpVotes;
-  const points = difference * 100;
-  
-  if (winningPlayer && points > 0) {
-    const updatedProfile = await updatePlayerScore(winningPlayer, points);
-    console.log(`Score updated for player ${winningPlayer}: +${points} points`);
+    console.log("Tie among players:", topPlayers);
     return {
-      tie: false,
-      winningPlayer,
-      points,
-      username: updatedProfile.username,
-      maxVotes
+      tie: true,
+      players: results
     };
+  } else {
+    // === SINGLE WINNER SCENARIO ===
+    const winningPlayer = topPlayers[0];
+    // Find the second-highest total
+    let runnerUpVotes = 0;
+    for (const pid of playerIds) {
+      if (pid !== winningPlayer) {
+        const v = playerVotes[pid].totalVotes;
+        if (v > runnerUpVotes) runnerUpVotes = v;
+      }
+    }
+
+    const difference = maxTotalVotes - runnerUpVotes;
+    const bonusPoints = difference * 100;
+
+    if (bonusPoints > 0) {
+      const updatedProfile = await updatePlayerScore(winningPlayer, bonusPoints);
+      console.log(
+        `Score updated for player ${winningPlayer}: +${bonusPoints} points`
+      );
+      return {
+        tie: false,
+        winningPlayer,
+        points: bonusPoints,
+        username: updatedProfile.username,
+        maxVotes: maxTotalVotes
+      };
+    } else {
+      // No difference => no bonus
+      console.log("No difference in votes, no bonus awarded.");
+      return { tie: false, winningPlayer, points: 0, maxVotes: maxTotalVotes };
+    }
   }
-  
-  console.log('No score update necessary.');
-  return { tie: false, winningPlayer: null, points: 0, maxVotes: 0 };
 }
+
+  //   const [p1, p2] = playerIds;
+  //   const p1Votes = playerVotes[p1].totalVotes;
+  //   const p2Votes = playerVotes[p2].totalVotes;
+
+  //   if (p1Votes === p2Votes) {
+  //     const p1Points = p1Votes * 100;
+  //     const p2Points = p2Votes * 100;
+  //     const p1Profile = await updatePlayerScore(p1, p1Points);
+  //     const p2Profile = await updatePlayerScore(p2, p2Points);
+
+  //     console.log(`Tie! Player ${p1} and Player ${p2} each got ${p1Points} points.`);
+  //     return {
+  //       tie: true,
+  //       players: [
+  //         { playerId: p1, username: p1Profile.username, votes: p1Votes, points: p1Points, responses: playerVotes[p1].responses },
+  //         { playerId: p2, username: p2Profile.username, votes: p2Votes, points: p2Points, responses: playerVotes[p2].responses }
+  //       ]
+  //     };
+  //   }
+  // }
+  
+//   let winningPlayer = null;
+//   let maxVotes = 0;
+//   let runnerUpVotes = 0;
+//   responses.forEach(response => {
+//     const count = voteCounts[response.id] || 0;
+//     if (count > maxVotes) {
+//       runnerUpVotes = maxVotes;
+//       maxVotes = count;
+//       winningPlayer = response.player_id;
+//     } else if (count > runnerUpVotes) {
+//       runnerUpVotes = count;
+//     }
+//   });
+  
+//   const difference = maxVotes - runnerUpVotes;
+//   const points = difference * 100;
+  
+//   if (winningPlayer && points > 0) {
+//     const updatedProfile = await updatePlayerScore(winningPlayer, points);
+//     console.log(`Score updated for player ${winningPlayer}: +${points} points`);
+//     return {
+//       tie: false,
+//       winningPlayer,
+//       points,
+//       username: updatedProfile.username,
+//       maxVotes
+//     };
+//   }
+  
+//   console.log('No score update necessary.');
+//   return { tie: false, winningPlayer: null, points: 0, maxVotes: 0 };
+// }
 
 async function updatePlayerScore(playerId, pointsToAdd) {
   const { data: profileData, error: profileError } = await supabase
@@ -359,7 +431,7 @@ async function updatePlayerScore(playerId, pointsToAdd) {
 
   if (updateError) throw updateError;
 
-  return { ...profileData, score: newScore };
+  return Object.assign({}, profileData, { score: newScore });
 }
 
 export function subscribeToVotes(gameId, onUpdate) {
