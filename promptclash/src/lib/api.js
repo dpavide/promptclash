@@ -41,6 +41,71 @@ export async function addUserToGame(username, authData, gameId) {
   console.log(`User ${username} added to game ${gameId}`);
 }
 
+export async function submitPlayerPrompt(gameId, userId, promptText) {
+  let finalPromptText = promptText.trim();
+
+  // If user left prompt blank => pick a random from the existing default prompts
+  if (!finalPromptText) {
+    // fetch all default prompts
+    const { data: defaultPrompts, error: defError } = await supabase
+      .from('prompts')
+      .select('text')
+      .eq('is_default', true);
+
+    if (defError || !defaultPrompts || defaultPrompts.length === 0) {
+      throw new Error('No default prompts available');
+    }
+
+    // pick a random one
+    const randomIndex = Math.floor(Math.random() * defaultPrompts.length);
+    finalPromptText = defaultPrompts[randomIndex].text;
+  }
+
+  //Insert as a new row with is_default = false
+  const { error } = await supabase
+    .from('prompts')
+    .insert([{ text: finalPromptText, game_id: gameId, player_id: userId, is_default: false }]);
+
+  if (error) {
+    console.error('Error submitting prompt:', error);
+    throw error;
+  }
+  console.log(`User ${userId} wrote a prompt: ${finalPromptText}`);
+}
+
+// Fetch all prompts for a given game
+export async function fetchGamePrompts(gameId) {
+  const { data, error } = await supabase
+    .from('prompts')
+    .select('id, text, player_id')
+    .eq('game_id', gameId);
+  if (error) {
+    console.error('Error fetching prompts:', error);
+    return [];
+  }
+  return data;
+}
+
+// Insert a new row in 'responses' for each prompt the user is answering.
+// The 'text' field is the user's response, 'prompt_id' is the ID of the prompt being answered.
+export async function submitResponse(gameId, userId, promptId, responseText) {
+  const { error } = await supabase
+    .from('responses')
+    .insert([
+      {
+        game_id: gameId,
+        player_id: userId,
+        prompt_id: promptId,
+        text: responseText
+      }
+    ]);
+  if (error) {
+    console.error('Error submitting response:', error);
+    throw error;
+  }
+  console.log(`User ${userId} responded to prompt ${promptId}: ${responseText}`);
+}
+
 // Kept for backward compatibility, but not recommended for new code
 export async function addUserToLatestGame(username, authData) {
   if (!username) {
@@ -198,29 +263,29 @@ export async function fetchPromptForCurrentGame() {
 export async function fetchResponsesForGame(gameId) {
   const { data, error } = await supabase
     .from('responses')
-    .select('id, text, votes:votes(count)')
+    .select('id, text, game_id, player_id, prompt_id')
     .eq('game_id', gameId);
 
   if (error) {
     console.error('Error fetching responses:', error);
     return [];
   }
-  
-  return data.map((r) => ({
-    id: r.id,
-    response: r.text,
-    vote_count: r.votes ? r.votes[0].count : 0,
-  }));
+  return data;
+  // return data.map((r) => ({
+  //   id: r.id,
+  //   response: r.text,
+  //   vote_count: r.votes ? r.votes[0].count : 0,
+  // }));
 }
 
-export async function voteForResponse(responseId, userId, gameId) {
+export async function voteForResponse(responseId, userId, gameId, promptId) {
   console.log('Vote for response called');
-  const { error } = await supabase
+  const { error: insertErr } = await supabase
     .from('votes')
-    .insert([{ response_id: responseId, user_id: userId, game_id: gameId }]);
+    .insert([{ response_id: responseId, user_id: userId, game_id: gameId, prompt_id: promptId }]);
 
-  if (error) {
-    console.error('Error casting vote:', error);
+  if (insertErr) {
+    console.error('Error casting vote:', insertErr  );
     return { error: 'Error submitting vote' };
   }
 
@@ -234,26 +299,197 @@ export async function voteForResponse(responseId, userId, gameId) {
     return { error: 'Error updating voting status' };
   }
 
-  console.log(`User ${userId} voted for response ${responseId}`);
-
-  const allVoted = await checkAllVoted(gameId);
-  return { allVoted };
+  console.log(`User ${userId} voted for response ${responseId} (prompt_id=${promptId})`);
+  return { success: true };
+  // const allVoted = await checkAllVoted(gameId);
+  // return { allVoted };
 }
 
-export async function checkAllVoted(gameId) {
-  const { data: players, error: countError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('game_id', gameId);
+// export async function checkAllVoted(gameId) {
+//   const { data: players, error: countError } = await supabase
+//     .from('profiles')
+//     .select('*')
+//     .eq('game_id', gameId);
 
-  if (countError) {
-    console.error('Error counting the votes', countError);
-    return { error: 'Error counting votes' };
+//   if (countError) {
+//     console.error('Error counting the votes', countError);
+//     return { error: 'Error counting votes' };
+//   }
+
+//   const allVoted = players.every((player) => player.voted);
+//   console.log('All voted?', allVoted);
+//   return allVoted;
+// }
+
+export async function checkAllVotedForPrompt(gameId, promptId, neededVoters) {
+  const { data: votes, error: votesErr } = await supabase
+    .from('votes')
+    .select('user_id')
+    .eq('game_id', gameId)
+    .eq('prompt_id', promptId);
+
+  if (votesErr || !votes) {
+    console.error("Error fetching votes for prompt", promptId, votesErr);
+    return false;
   }
 
-  const allVoted = players.every((player) => player.voted);
-  console.log('All voted?', allVoted);
-  return allVoted;
+  const uniqueVoters = new Set(votes.map(v => v.user_id));
+  console.log(`Prompt #${promptId} => uniqueVoters=${uniqueVoters.size}, needed=${neededVoters}`);
+  return (uniqueVoters.size >= neededVoters);
+}
+
+
+// Helper to fetch all votes for a game
+export async function fetchVotesForGame(gameId) {
+  const { data, error } = await supabase
+    .from('votes')
+    .select('response_id, user_id, game_id')
+    .eq('game_id', gameId);
+  if (error) {
+    console.error('Error fetching votes for game:', error);
+    return [];
+  }
+  return data;
+}
+
+// export async function calculateRoundScores(gameId) {
+//   // 1) Fetch all votes
+//   const votes = await fetchVotesForGame(gameId);
+
+//   // Tally votes by response_id
+//   const voteCounts = {};
+//   votes.forEach(v => {
+//     voteCounts[v.response_id] = (voteCounts[v.response_id] || 0) + 1;
+//   });
+
+//   // 2) Fetch all responses
+//   const responses = await fetchResponsesForGame(gameId);
+
+//   // Group responses by prompt_id
+//   const promptsMap = {}; // key = prompt_id, value = array of response objects
+//   responses.forEach(r => {
+//     if (!promptsMap[r.prompt_id]) promptsMap[r.prompt_id] = [];
+//     // Also store the vote count
+//     r.vote_count = voteCounts[r.id] || 0;
+//     promptsMap[r.prompt_id].push(r);
+//   });
+
+//   // 3) For each prompt, find the highest vote_count
+//   const roundResults = []; // each item: { promptId, winners: [...], maxVotes }
+//   for (const promptId in promptsMap) {
+//     const group = promptsMap[promptId];
+//     let maxVotes = 0;
+//     group.forEach(r => {
+//       if (r.vote_count > maxVotes) maxVotes = r.vote_count;
+//     });
+//     // Collect all winners
+//     const winners = group.filter(r => r.vote_count === maxVotes);
+//     roundResults.push({
+//       promptId: Number(promptId),
+//       winners,
+//       maxVotes
+//     });
+//   }
+
+//   // 4) Update player scores. For each prompt:
+//   // If there's a single winner, we do a bonus = maxVotes * 100 + 50
+//   // If there's a tie, each winner gets maxVotes * 100 (no bonus).
+//   for (const result of roundResults) {
+//     if (result.winners.length > 1) {
+//       // tie scenario
+//       for (const w of result.winners) {
+//         const points = w.vote_count * 100;
+//         await updatePlayerScore(w.player_id, points);
+//       }
+//     } else {
+//       // single winner
+//       const w = result.winners[0];
+//       const points = w.vote_count * 100 + 50;
+//       await updatePlayerScore(w.player_id, points);
+//     }
+//   }
+//   return roundResults;
+// }
+
+export async function calculatePromptScores(gameId, promptId) {
+  // 1) fetch the 2 responses for that prompt
+  const { data: responses, error: respErr } = await supabase
+    .from('responses')
+    .select('id, player_id')
+    .eq('game_id', gameId)
+    .eq('prompt_id', promptId);
+
+  if (respErr || !responses || responses.length < 2) {
+    console.error("Not enough responses for prompt:", promptId);
+    return { error: "Not enough responses" };
+  }
+
+  // 2) fetch votes for these responses
+  const responseIds = responses.map(r => r.id);
+  const { data: votes, error: voteErr } = await supabase
+    .from('votes')
+    .select('response_id')
+    .in('response_id', responseIds)
+    .eq('game_id', gameId);
+
+  if (voteErr || !votes) {
+    console.error("Error fetching votes for prompt:", promptId, voteErr);
+    return { error: "Error fetching votes" };
+  }
+
+  // 3) tally
+  const voteCounts = {};
+  for (const v of votes) {
+    voteCounts[v.response_id] = (voteCounts[v.response_id] || 0) + 1;
+  }
+
+  // 4) figure out winner/loser
+  let [respA, respB] = responses;
+  const countA = voteCounts[respA.id] || 0;
+  const countB = voteCounts[respB.id] || 0;
+
+  let winningResp = { ...respA, vote_count: countA };
+  let losingResp = { ...respB, vote_count: countB };
+
+  if (countB > countA) {
+    winningResp = { ...respB, vote_count: countB };
+    losingResp = { ...respA, vote_count: countA };
+  } else if (countA === countB) {
+    // tie scenario
+    return { tie: true, respA: { ...respA, vote_count: countA }, respB: { ...respB, vote_count: countB } };
+  }
+
+  // 5) awarding points
+  const difference = Math.abs(countA - countB);
+  const bonusPoints = difference * 100;
+
+  if (bonusPoints > 0) {
+    // fetch winner's current score
+    const { data: profileData, error: profileErr } = await supabase
+      .from('profiles')
+      .select('score, username')
+      .eq('id', winningResp.player_id)
+      .single();
+    if (!profileErr && profileData) {
+      const oldScore = profileData.score || 0;
+      const newScore = oldScore + bonusPoints;
+      const { error: updateErr } = await supabase
+        .from('profiles')
+        .update({ score: newScore })
+        .eq('id', winningResp.player_id);
+      if (!updateErr) {
+        console.log(`Score updated for player ${winningResp.player_id}: +${bonusPoints} points`);
+      }
+    }
+  }
+
+  return {
+    tie: false,
+    winner: winningResp,
+    loser: losingResp,
+    difference,
+    bonusPoints
+  };
 }
 
 export async function calculateGameScores(gameId) {
@@ -358,59 +594,6 @@ export async function calculateGameScores(gameId) {
   }
 }
 
-  //   const [p1, p2] = playerIds;
-  //   const p1Votes = playerVotes[p1].totalVotes;
-  //   const p2Votes = playerVotes[p2].totalVotes;
-
-  //   if (p1Votes === p2Votes) {
-  //     const p1Points = p1Votes * 100;
-  //     const p2Points = p2Votes * 100;
-  //     const p1Profile = await updatePlayerScore(p1, p1Points);
-  //     const p2Profile = await updatePlayerScore(p2, p2Points);
-
-  //     console.log(`Tie! Player ${p1} and Player ${p2} each got ${p1Points} points.`);
-  //     return {
-  //       tie: true,
-  //       players: [
-  //         { playerId: p1, username: p1Profile.username, votes: p1Votes, points: p1Points, responses: playerVotes[p1].responses },
-  //         { playerId: p2, username: p2Profile.username, votes: p2Votes, points: p2Points, responses: playerVotes[p2].responses }
-  //       ]
-  //     };
-  //   }
-  // }
-  
-//   let winningPlayer = null;
-//   let maxVotes = 0;
-//   let runnerUpVotes = 0;
-//   responses.forEach(response => {
-//     const count = voteCounts[response.id] || 0;
-//     if (count > maxVotes) {
-//       runnerUpVotes = maxVotes;
-//       maxVotes = count;
-//       winningPlayer = response.player_id;
-//     } else if (count > runnerUpVotes) {
-//       runnerUpVotes = count;
-//     }
-//   });
-  
-//   const difference = maxVotes - runnerUpVotes;
-//   const points = difference * 100;
-  
-//   if (winningPlayer && points > 0) {
-//     const updatedProfile = await updatePlayerScore(winningPlayer, points);
-//     console.log(`Score updated for player ${winningPlayer}: +${points} points`);
-//     return {
-//       tie: false,
-//       winningPlayer,
-//       points,
-//       username: updatedProfile.username,
-//       maxVotes
-//     };
-//   }
-  
-//   console.log('No score update necessary.');
-//   return { tie: false, winningPlayer: null, points: 0, maxVotes: 0 };
-// }
 
 async function updatePlayerScore(playerId, pointsToAdd) {
   const { data: profileData, error: profileError } = await supabase
@@ -419,7 +602,11 @@ async function updatePlayerScore(playerId, pointsToAdd) {
     .eq('id', playerId)
     .single();
 
-  if (profileError) throw profileError;
+  if (profileError) 
+    {
+      console.error('Error fetching profile to update score:', profileError);
+      throw profileError;
+    }
 
   const currentScore = profileData.score || 0;
   const newScore = currentScore + pointsToAdd;
@@ -431,8 +618,23 @@ async function updatePlayerScore(playerId, pointsToAdd) {
 
   if (updateError) throw updateError;
 
-  return Object.assign({}, profileData, { score: newScore });
+  console.log(`Player ${playerId} score updated from ${currentScore} to ${newScore}`);
+  return { ...profileData, score: newScore };
 }
+
+export async function fetchAllPlayersScores(gameId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username, score')
+    .eq('game_id', gameId)
+    .order('score', { ascending: false });
+
+  if (error) {
+    console.error("Error fetching final scores:", error);
+    return [];
+  }
+  return data;
+} 
 
 export function subscribeToVotes(gameId, onUpdate) {
   const channel = supabase.channel("game-changes");

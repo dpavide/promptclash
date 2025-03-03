@@ -84,8 +84,8 @@
   });
 
   async function startGame() {
-    if (players.length < 2) {
-      alert("At least 2 players are required to start the game!");
+    if (players.length < 3) {
+      alert("At least 3 players are required to start the game!");
       return;
     }
     try {
@@ -139,8 +139,8 @@
   <p>Waiting for players to join...</p>
 {/if}
 
-<button on:click={startGame} disabled={players.length < 2}>
-  Start Game ({players.length}/2+)
+<button on:click={startGame} disabled={players.length < 3}>
+  Start Game ({players.length}/3+)
 </button>
 
 <style>

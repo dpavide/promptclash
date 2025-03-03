@@ -2,17 +2,52 @@
   import { goto } from "$app/navigation";
   import { supabase } from "$lib/supabaseClient";
   import { onMount, onDestroy, tick } from "svelte";
-  import { monitorPlayerCount } from "$lib/api";
+  import { monitorPlayerCount, submitPlayerPrompt, fetchGamePrompts, submitResponse } from "$lib/api";
+
+  // We'll define five stages:
+  // 1) "prompt"
+  // 2) "waitingPrompt"
+  // 3) "response1"
+  // 4) "response2"
+  // 5) "waitingResponse"
+  // Then we redirect to /voting when all players have 2 responses in 'responses' table.
+
+  let stage: "prompt" | "waitingPrompt" | "response1" | "response2" | "waitingResponse" = "prompt";
+
+  // For the prompt-writing phase:
+  let promptInput = "";
+ 
+  
+  // For the response phase:
+  let assignedPrompts: any[] = [];
+  let assignedPrompt: any = null;
+  let responseInput = "";
+  let responseIndex = 0;
+  let allSubmitted = false;
+  let iHaveSubmitted = false;
+
+  // For subscription logic:
+  let unsubscribeCount: any;
+  let promptSubscription: any;
+  let responseSubscription: any;
+  let profilesSubscription: any = null;
+ 
 
   let prompt: any = null;
   let response: string = "";
-  let currentGameId: number | null = null;
+  let fallbackPrompt = "Are you going to be employed?"; //Just in case the DB has no default promtps.
+
+  let currentGame: any;
+  let gameId: number | null = null;
+  let userId: string | null = null;
+
+
   let errorMessage: string = "";
   let successMessage: string = "";
   let playerCount: number = 0;
   let unsubscribe: any;
-  let currentGame: any;
-
+  let subscription: any;
+  
   let playerimages: string[] = [
     "gameCharacters/PlayerRedIdle.png",
     "gameCharacters/PlayerOrangeIdle.png",
@@ -34,7 +69,7 @@
     const { data: gameData, error: gameError } = await supabase
       .from("game")
       .select("prompt_id")
-      .eq("id", currentGameId)
+      .eq("id", gameId)
       .single();
     if (gameError || !gameData) {
       console.error("Error fetching game:", gameError);
@@ -63,17 +98,17 @@
       const { data: players, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq("game_id", currentGameId);
+        .eq("game_id", gameId);
       if (error) {
         console.error("Error fetching initial players:", error);
         return;
       }
       playerCount = players.length;
-      console.log(`Initial players in game ${currentGameId}:`, playerCount);
+      console.log(`Initial players in game ${gameId}:`, playerCount);
 
       // Subscribe to player count changes without automatic redirect
       unsubscribe = monitorPlayerCount(
-        currentGameId,
+        gameId,
         () => {
           // Removed automatic redirect to prevent interference with voting screen navigation
         },
@@ -86,37 +121,160 @@
     }
   }
 
-  async function submitResponse() {
+  function subscribeToPromptSubmissions() {
+    promptSubscription = supabase
+      .channel("prompt-submissions")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
+          filter: `game_id=eq.${gameId}`
+        },
+        async () => {
+          await checkIfAllSubmittedPrompts();
+        }
+      )
+      .subscribe();
+  }
+
+  // check if all players have submitted_prompt = true
+  async function checkIfAllSubmittedPrompts() {
+    const { data: players, error } = await supabase
+      .from("profiles")
+      .select("id, submitted_prompt")
+      .eq("game_id", gameId);
+    if (error || !players) return;
+
+    const total = players.length;
+    const submittedCount = players.filter(p => p.submitted_prompt).length;
+    console.log(`Prompt stage: total=${total}, submitted=${submittedCount}`);
+    if (submittedCount === total) {
+      // all have prompts => assign 2 prompts for each user
+      await assignPromptsForCurrentUser();
+      stage = "response1";
+      successMessage = "All players have submitted prompts! Please answer your first assigned prompt.";
+    }
+  }
+
+  /**
+   * handleSubmitPrompt(useDefault: boolean)
+   * - If useDefault is true, we pass an empty string so the API picks one of your default prompts.
+   * - Otherwise, we use the text typed by the user.
+   * After submitting, we fetch all prompts, assign the next prompt (cyclically) that isn’t the user's own,
+   * and then switch the stage to "waiting", then to stage "response" once all others have added their prompts.
+   */
+   // Submit the user's prompt or default
+   async function handleSubmitPrompt(useDefault: boolean) {
+    errorMessage = "";
+    if (!userId) {
+      errorMessage = "No user is signed in.";
+      return;
+    }
+    const typedPrompt = useDefault ? "" : promptInput.trim();
     try {
-      errorMessage = "";
-      successMessage = "";
-      const { data: user, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        console.error("No user is signed in:", userError);
-        errorMessage = "You must be logged in to submit a response.";
+      await submitPlayerPrompt(gameId, userId, typedPrompt);
+      // mark user => submitted_prompt = true
+      const { error } = await supabase
+        .from("profiles")
+        .update({ submitted_prompt: true })
+        .eq("id", userId);
+      if (error) {
+        console.error("Error marking submitted_prompt:", error);
+      }
+      // switch to waitingPrompt
+      stage = "waitingPrompt";
+    } catch (err) {
+      console.error("Error submitting prompt:", err);
+      errorMessage = "Failed to submit prompt. Please try again.";
+    }
+  }
+
+  async function assignPromptsForCurrentUser() {
+    try {
+      // fetch all prompts
+      const { data: allPrompts, error: pErr } = await supabase
+        .from("prompts")
+        .select("id, text, player_id")
+        .eq("game_id", gameId);
+      if (pErr || !allPrompts) {
+        errorMessage = "Error fetching prompts for assignment.";
         return;
       }
-      const userId = user.user.id;
 
-      const { error: insertError } = await supabase.from("responses").insert([
-        {
-          game_id: currentGameId,
-          player_id: userId,
-          text: response,
-        },
-      ]);
-
-      if (insertError) {
-        console.error("Error submitting response:", insertError);
-        errorMessage = "Failed to submit response. Please try again.";
-      } else {
-        successMessage = "Response submitted successfully!";
-        response = "";
-        goto(`/voting?gameId=${currentGameId}`);
+      // fetch all players
+      const { data: allPlayers, error: plErr } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("game_id", gameId);
+      if (plErr || !allPlayers) {
+        errorMessage = "Error fetching players for assignment.";
+        return;
       }
-    } catch (error) {
-      console.error("Error in submitResponse:", error);
-      errorMessage = "An error occurred. Please try again.";
+      allPlayers.sort((a, b) => a.id.localeCompare(b.id));
+      const n = allPlayers.length;
+      const index = allPlayers.findIndex(p => p.id === userId);
+      if (index === -1) {
+        errorMessage = "User not found among players.";
+        return;
+      }
+
+      // For each prompt i, the 2 responders are (i+1)%n, (i+2)%n
+      // So each user i is assigned the prompts from (i-1)%n and (i-2)%n
+      // Or simpler: we do user i answers from (i+1)%n and (i+2)%n
+      const owner1 = allPlayers[(index + 1) % n].id;
+      const owner2 = allPlayers[(index + 2) % n].id;
+
+      allPrompts.sort((a, b) => a.id - b.id);
+
+      const p1 = allPrompts.find(pr => pr.player_id === owner1);
+      const p2 = allPrompts.find(pr => pr.player_id === owner2);
+
+      assignedPrompts = [];
+      if (p1) assignedPrompts.push(p1);
+      if (p2) assignedPrompts.push(p2);
+
+      console.log("Assigned prompts for user", userId, ":", assignedPrompts);
+    } catch (err) {
+      console.error("Error in assignPromptsForCurrentUser:", err);
+    }
+  }
+
+  async function handleSubmitResponse() {
+    if (!assignedPrompts || assignedPrompts.length === 0) {
+      errorMessage = "No assigned prompts found.";
+      return;
+    }
+    if (!userId) {
+      errorMessage = "No user is signed in.";
+      return;
+    }
+    // The user is responding to assignedPrompts[responseIndex].
+    const targetPrompt = assignedPrompts[responseIndex];
+    if (!targetPrompt) {
+      errorMessage = "Could not find the assigned prompt to answer.";
+      return;
+    }
+    try {
+      // 1) Submit the response
+      await submitResponse(gameId, userId, targetPrompt.id, responseInput);
+      // 2) Clear the input
+      responseInput = "";
+
+      // if we are on the first prompt => move on to second
+      if (responseIndex === 0 && assignedPrompts.length > 1) {
+        responseIndex = 1;
+        stage = "response2";
+        successMessage = "Ok you answered that first prompt. Now answer another one!";
+      } else {
+        // user answered second prompt => done
+        stage = "waitingResponse";
+        successMessage = "You answered both prompts. Waiting for others...";
+      }
+    } catch (err) {
+      console.error("Error submitting response:", err);
+      errorMessage = "Failed to submit response. Please try again.";
     }
   }
 
@@ -131,7 +289,7 @@
 
       const { error: insertError } = await supabase.from("responses").insert([
         {
-          game_id: currentGameId,
+          game_id: gameId,
           player_id: userId,
           drawing: img,
         },
@@ -141,7 +299,7 @@
         console.error("Error submitting drawing:", insertError);
       } else {
         response = "";
-        goto(`/voting?gameId=${currentGameId}`);
+        goto(`/voting?gameId=${gameId}`);
       }
     } catch (error) {
       console.error("Error in submitResponseForDrawing:", error);
@@ -188,14 +346,46 @@
       goto("/waitingroom");
       return;
     }
-    currentGameId = Number(gameIdParam);
+    gameId = Number(gameIdParam);
 
-    currentGame = await fetchGame();
-    if (currentGame && currentGame.prompt_id) {
-      prompt = await fetchPrompt(currentGame.prompt_id);
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    userId = sessionData?.session?.user?.id || null;
+    if (sessionError || !userId) {
+      errorMessage = "No user is signed in.";
     }
 
+    // // subscribe to changes in profiles => see if all players have submitted
+    // subscription = supabase
+    //   .channel("prompt-submissions")
+    //   .on(
+    //     "postgres_changes",
+    //     {
+    //       event: "*",
+    //       schema: "public",
+    //       table: "profiles",
+    //       filter: `game_id=eq.${gameId}`
+    //     },
+    //     async () => {
+    //       await checkIfAllSubmittedResponse();
+    //     }
+    //   )
+    //   .subscribe();
+
+    // also do an initial check
+    // await checkIfAllSubmittedResponse();
+  
+
+    currentGame = await fetchGame();
     setupPlayerCountMonitoring();
+
+    //subscribe to changes in profiles => checkIfAllSubmittedPrompts
+    subscribeToPromptSubmissions();
+    await checkIfAllSubmittedPrompts();
+    
+    subscribeToResponseSubmissions();
+    await checkIfAllSubmittedResponses();
+
+    
 
     await tick();
     let tries = 10;
@@ -217,36 +407,154 @@
   });
 
   onDestroy(() => {
-    if (unsubscribe) {
-      if (typeof unsubscribe.unsubscribe === "function") {
+    if (unsubscribeCount) {
+      if (typeof unsubscribeCount.unsubscribe === "function") {
         unsubscribe.unsubscribe();
-      } else if (typeof unsubscribe === "function") {
-        unsubscribe();
+      } else if (typeof unsubscribeCount === "function") {
+        unsubscribeCount();
       }
     }
+    if (promptSubscription) supabase.removeChannel(promptSubscription);
+    if (responseSubscription) supabase.removeChannel(responseSubscription);
   });
+
+  // subscribe => each time a user updates 'responses', we check if all are done
+  // subscribe => each time a user updates 'responses', we check if all are done
+  function subscribeToResponseSubmissions() {
+    responseSubscription = supabase
+      .channel("response-submissions")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "responses",
+          filter: `game_id=eq.${gameId}`
+        },
+        async () => {
+          await checkIfAllSubmittedResponses();
+        }
+      )
+      .subscribe();
+  }
+
+
+  // check if all players have submitted_response = true
+  async function checkIfAllSubmittedResponses() {
+    // 1) fetch all players
+    const { data: players, error: e1 } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("game_id", gameId);
+    if (e1 || !players) {
+      console.error("Error fetching players:", e1);
+      return;
+    }
+    const totalPlayers = players.length;
+
+    // 2) fetch all responses
+    const { data: allResponses, error: e2 } = await supabase
+      .from("responses")
+      .select("player_id")
+      .eq("game_id", gameId);
+    if (e2 || !allResponses) {
+      console.error("Error fetching responses:", e2);
+      return;
+    }
+
+    // 3) build a map: how many responses each user has
+    const counts: Record<string, number> = {};
+    for (const r of allResponses) {
+      counts[r.player_id] = (counts[r.player_id] || 0) + 1;
+    }
+
+    // 4) check if each user has at least 2
+    let doneCount = 0;
+    for (const p of players) {
+      if ((counts[p.id] || 0) >= 2) {
+        doneCount++;
+      }
+    }
+
+    console.log(`Response stage: total=${totalPlayers}, responded2=${doneCount}`);
+    if (doneCount === totalPlayers) {
+      // all players have 2 responses => go to /voting
+      goto(`/voting?gameId=${gameId}&promptIndex=0`);
+    }
+  }
+
 </script>
 
 <div class="game-container">
   <img src="backgrounds/bgstart.png" alt="Background" class="backgroundbox" />
   <div class="prompt-wrapper">
+
     {#if errorMessage}
       <p class="error">{errorMessage}</p>
     {/if}
-    {#if successMessage}
+    <!-- {#if successMessage}
       <p class="success">{successMessage}</p>
-    {/if}
-    {#if prompt}
+    {/if} -->
+
+    {#if stage === "prompt"}
+      <!-- user picks or types a prompt -->
       <div class="prompt-container">
-        <p>Prompt: {prompt.text}</p>
-        <textarea bind:value={response} placeholder="Type your response here..."
-        ></textarea>
-        <button on:click={submitResponse}>Submit Response</button>
+        <p>Write your own prompt or use a default:</p>
+        <input
+          type="text"
+          bind:value={promptInput}
+          placeholder="(Optional) Type your prompt..."
+        />
+        <div class="button-group" style="margin-top: 1rem;">
+          <button on:click={() => handleSubmitPrompt(false)}>Submit Prompt</button>
+          <button on:click={() => handleSubmitPrompt(true)}>Use Default Prompt</button>
+        </div>
       </div>
-    {:else}
-      <p>Loading prompt...</p>
+
+    {:else if stage === "waitingPrompt"}
+      <div class="prompt-container">
+        <h2>Prompt submitted!</h2>
+        <p>Waiting for other players to submit their prompts...</p>
+      </div>
+
+    {:else if stage === "response1"}
+      {#if assignedPrompts.length > 0}
+        <div class="prompt-container">
+          <p><strong>Prompt #1</strong>:</p>
+          <p><em>{assignedPrompts[0].text}</em></p>
+          <textarea
+            bind:value={responseInput}
+            placeholder="Type your response for prompt #1..."
+          ></textarea>
+          <button on:click={handleSubmitResponse}>Submit Response</button>
+        </div>
+      {:else}
+        <p>Loading assigned prompts...</p>
+      {/if}
+
+    {:else if stage === "response2"}
+      {#if assignedPrompts.length > 1}
+        <div class="prompt-container">
+          <p><strong>Prompt #2</strong>:</p>
+          <p><em>{assignedPrompts[1].text}</em></p>
+          <textarea
+            bind:value={responseInput}
+            placeholder="Type your response..."
+          ></textarea>
+          <button on:click={handleSubmitResponse}>Submit Response</button>
+        </div>
+      {:else}
+        <p>Loading second prompt...</p>
+      {/if}
+
+    {:else if stage === "waitingResponse"}
+      <div class="prompt-container">
+        <h2>You answered both prompts!</h2>
+        <p>Waiting for other players to finish responding...</p>
+      </div>
     {/if}
   </div>
+
   <div class="players">
     {#each playerimages.slice(0, playerCount) as playerimage}
       <img src={playerimage} alt="Player" class="player" />
