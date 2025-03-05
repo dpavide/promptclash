@@ -354,27 +354,7 @@
       errorMessage = "No user is signed in.";
     }
 
-    // // subscribe to changes in profiles => see if all players have submitted
-    // subscription = supabase
-    //   .channel("prompt-submissions")
-    //   .on(
-    //     "postgres_changes",
-    //     {
-    //       event: "*",
-    //       schema: "public",
-    //       table: "profiles",
-    //       filter: `game_id=eq.${gameId}`
-    //     },
-    //     async () => {
-    //       await checkIfAllSubmittedResponse();
-    //     }
-    //   )
-    //   .subscribe();
-
-    // also do an initial check
-    // await checkIfAllSubmittedResponse();
-  
-
+    
     currentGame = await fetchGame();
     setupPlayerCountMonitoring();
 
@@ -418,7 +398,6 @@
     if (responseSubscription) supabase.removeChannel(responseSubscription);
   });
 
-  // subscribe => each time a user updates 'responses', we check if all are done
   // subscribe => each time a user updates 'responses', we check if all are done
   function subscribeToResponseSubmissions() {
     responseSubscription = supabase
