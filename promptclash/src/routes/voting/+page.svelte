@@ -11,9 +11,8 @@
   } from "$lib/api";
   import { goto } from "$app/navigation";
 
-  
   let userId = "";
-  let gameId= 0;
+  let gameId = 0;
 
   let promptIndex: number = 0;
   let allPrompts: any[] = [];
@@ -24,10 +23,9 @@
     player_id: string;
     vote_count: number;
   }> = [];
-  
 
-  let hasVoted = false; 
-  let subscription: any; 
+  let hasVoted = false;
+  let subscription: any;
   let VotesSubscription: any;
   let errorMessage = "";
 
@@ -35,8 +33,8 @@
   let playersCount = 0;
   let responderIDs = new Set<string>();
 
-    //not needed right now
-  let groups: Record<number, { prompt_text: string, responses: any[] }> = {};
+  //not needed right now
+  let groups: Record<number, { prompt_text: string; responses: any[] }> = {};
 
   async function fetchPlayerCount() {
     const { data, error } = await supabase
@@ -60,7 +58,7 @@
       .eq("game_id", gameId)
       .order("id", { ascending: true });
 
-      if (error || !promptsList || promptsList.length === 0) {
+    if (error || !promptsList || promptsList.length === 0) {
       errorMessage = "No prompts found for this game.";
       return false;
     }
@@ -75,7 +73,7 @@
 
   // Combined 2 functions: Fetch the responses for the current prompt & Subscribe to the responses table.
   async function fetchCurrentResponsesAndSetupSubscription() {
-    if(!currentPrompt){
+    if (!currentPrompt) {
       console.warn("No current prompt to fetch responses for.");
       return;
     }
@@ -92,12 +90,12 @@
     }
 
     // Identify the 2 responders
-    responderIDs = new Set(responsesData.map(r => r.player_id));
-    responses = responsesData.map(r => ({
+    responderIDs = new Set(responsesData.map((r) => r.player_id));
+    responses = responsesData.map((r) => ({
       id: r.id,
       text: r.text?.trim() || "{no response given}",
       player_id: r.player_id,
-      vote_count: 0
+      vote_count: 0,
     }));
 
     VotesSubscription = supabase
@@ -108,11 +106,15 @@
           event: "*",
           schema: "public",
           table: "votes",
-          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt.id}`
+          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt.id}`,
         },
         async () => {
           await refreshVoteCounts(); // function that refetches votes
-           const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt.id, playersWhoCanVote);
+          const allVoted = await checkAllVotedForPrompt(
+            gameId,
+            currentPrompt.id,
+            playersWhoCanVote
+          );
           if (allVoted) {
             goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
           }
@@ -141,15 +143,14 @@
       counts[v.response_id] = (counts[v.response_id] || 0) + 1;
     }
 
-    responses = responses.map(r => ({
+    responses = responses.map((r) => ({
       ...r,
-      vote_count: counts[r.id] || 0
+      vote_count: counts[r.id] || 0,
     }));
   }
 
-
-    // Fetch the current prompt (based on promptIndex) and its 2 responses.
-    async function fetchPromptAndResponses() {
+  // Fetch the current prompt (based on promptIndex) and its 2 responses.
+  async function fetchPromptAndResponses() {
     try {
       // Fetch all prompts for this game (sorted by id).
       const { data: promptList, error: pErr } = await supabase
@@ -179,11 +180,12 @@
         return false;
       }
       // Map responses: use r.text (or fallback to a default message if empty)
-      responses = respList.map(r => ({
+      responses = respList.map((r) => ({
         id: r.id,
-        text: r.text && r.text.trim().length > 0 ? r.text : "{no response given}",
+        text:
+          r.text && r.text.trim().length > 0 ? r.text : "{no response given}",
         player_id: r.player_id,
-        vote_count: 0 // vote counts will be updated by subscription.
+        vote_count: 0, // vote counts will be updated by subscription.
       }));
       return true;
     } catch (err) {
@@ -234,19 +236,24 @@
     }
 
     // Group responses by prompt_id and attach vote counts.
-    let tempGroups: Record<number, { prompt_text: string, responses: any[] }> = {};
+    let tempGroups: Record<number, { prompt_text: string; responses: any[] }> =
+      {};
     responses.forEach((r: any) => {
       const pid = r.prompt_id;
       // Use r.text (if empty, fallback to a default string)
-      const text = r.text && r.text.trim().length > 0 ? r.text : "{no response given}";
+      const text =
+        r.text && r.text.trim().length > 0 ? r.text : "{no response given}";
       if (!tempGroups[pid]) {
-        tempGroups[pid] = { prompt_text: promptMap[pid] || "Unknown prompt", responses: [] };
+        tempGroups[pid] = {
+          prompt_text: promptMap[pid] || "Unknown prompt",
+          responses: [],
+        };
       }
       tempGroups[pid].responses.push({
         id: r.id,
         text,
         player_id: r.player_id,
-        vote_count: voteCounts[r.id] || 0
+        vote_count: voteCounts[r.id] || 0,
       });
     });
     groups = tempGroups;
@@ -258,8 +265,7 @@
     responses =
       data.map((r) => ({
         ...r,
-        response:
-          r.text?.trim().length > 0 ? r.text : "{no response given}",
+        response: r.text?.trim().length > 0 ? r.text : "{no response given}",
       })) || [];
   }
 
@@ -272,8 +278,8 @@
       .eq("game_id", gameId)
       .eq("prompt_id", currentPrompt.id)
       .maybeSingle();
-      if (!error && data) {
-        hasVoted = true;
+    if (!error && data) {
+      hasVoted = true;
     }
   }
 
@@ -283,13 +289,22 @@
       return;
     }
     try {
-      const voteResult = await voteForResponse(responseId, userId, gameId, currentPrompt.id);
+      const voteResult = await voteForResponse(
+        responseId,
+        userId,
+        gameId,
+        currentPrompt.id
+      );
       if (voteResult?.error) {
         errorMessage = "Failed to submit vote.";
         return;
       }
       // after voting, check if everyone who was allowed to vote did
-      const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt.id, playersWhoCanVote);
+      const allVoted = await checkAllVotedForPrompt(
+        gameId,
+        currentPrompt.id,
+        playersWhoCanVote
+      );
       if (allVoted) {
         goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
       } else {
@@ -312,7 +327,7 @@
           schema: "public",
           table: "votes",
           // Only watch votes for this game & this prompt
-          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt?.id}`
+          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt?.id}`,
         },
         async () => {
           // Re-check if everyone has voted
@@ -336,11 +351,11 @@
     const PromptIndexParameter = urlParams.get("promptIndex");
     if (!gameIdParameter) {
       alert("Game ID not specified.");
-      goto("/waitingroom");
+      goto("/");
       return;
     }
     gameId = Number(gameIdParameter);
-    promptIndex = PromptIndexParameter? Number(PromptIndexParameter) : 0;
+    promptIndex = PromptIndexParameter ? Number(PromptIndexParameter) : 0;
 
     // Get user info
     const { data: sessionData } = await supabase.auth.getSession();
@@ -349,14 +364,17 @@
     await fetchPlayerCount();
 
     const ok = await fetchCurrentPrompt();
-    if (!ok || !currentPrompt){
+    if (!ok || !currentPrompt) {
       return;
     }
     await fetchCurrentResponsesAndSetupSubscription();
   });
 
   onDestroy(() => {
-    if (VotesSubscription && typeof VotesSubscription.unsubscribe === "function") {
+    if (
+      VotesSubscription &&
+      typeof VotesSubscription.unsubscribe === "function"
+    ) {
       VotesSubscription.unsubscribe();
     }
   });

@@ -2,7 +2,12 @@
   import { goto } from "$app/navigation";
   import { supabase } from "$lib/supabaseClient";
   import { onMount, onDestroy, tick } from "svelte";
-  import { monitorPlayerCount, submitPlayerPrompt, fetchGamePrompts, submitResponse } from "$lib/api";
+  import {
+    monitorPlayerCount,
+    submitPlayerPrompt,
+    fetchGamePrompts,
+    submitResponse,
+  } from "$lib/api";
 
   // We'll define five stages:
   // 1) "prompt"
@@ -12,12 +17,16 @@
   // 5) "waitingResponse"
   // Then we redirect to /voting when all players have 2 responses in 'responses' table.
 
-  let stage: "prompt" | "waitingPrompt" | "response1" | "response2" | "waitingResponse" = "prompt";
+  let stage:
+    | "prompt"
+    | "waitingPrompt"
+    | "response1"
+    | "response2"
+    | "waitingResponse" = "prompt";
 
   // For the prompt-writing phase:
   let promptInput = "";
- 
-  
+
   // For the response phase:
   let assignedPrompts: any[] = [];
   let assignedPrompt: any = null;
@@ -31,7 +40,6 @@
   let promptSubscription: any;
   let responseSubscription: any;
   let profilesSubscription: any = null;
- 
 
   let prompt: any = null;
   let response: string = "";
@@ -41,14 +49,24 @@
   let gameId: number | null = null;
   let userId: string | null = null;
 
-
   let errorMessage: string = "";
   let successMessage: string = "";
   let playerCount: number = 0;
   let unsubscribe: any;
   let subscription: any;
-  
-  let playerimages: string[] = [
+
+  let playerWriteImages: string[] = [
+    "gameCharacters/PlayerRedWrite.png",
+    "gameCharacters/PlayerOrangeWrite.png",
+    "gameCharacters/PlayerYellowWrite.png",
+    "gameCharacters/PlayerLightGreenWrite.png",
+    "gameCharacters/PlayerDarkGreenWrite.png",
+    "gameCharacters/PlayerBlueWrite.png",
+    "gameCharacters/PlayerPurpleWrite.png",
+    "gameCharacters/PlayerPinkWrite.png",
+  ];
+
+  let playerIdleImages: string[] = [
     "gameCharacters/PlayerRedIdle.png",
     "gameCharacters/PlayerOrangeIdle.png",
     "gameCharacters/PlayerYellowIdle.png",
@@ -65,6 +83,9 @@
   let color: string = "#000000";
   let lineWidth: number = 5;
 
+  // NEW: players array – we fetch player ids (and usernames) from the database to determine join order
+  let players: { id: string; username?: string }[] = [];
+
   async function fetchGame() {
     const { data: gameData, error: gameError } = await supabase
       .from("game")
@@ -73,7 +94,7 @@
       .single();
     if (gameError || !gameData) {
       console.error("Error fetching game:", gameError);
-      goto("/waitingroom");
+      goto("/");
       return null;
     }
     return gameData;
@@ -87,7 +108,7 @@
       .single();
     if (promptError || !fetchedPrompt) {
       console.error("Error fetching prompt:", promptError);
-      goto("/waitingroom");
+      goto("/");
       return null;
     }
     return fetchedPrompt;
@@ -130,7 +151,7 @@
           event: "*",
           schema: "public",
           table: "profiles",
-          filter: `game_id=eq.${gameId}`
+          filter: `game_id=eq.${gameId}`,
         },
         async () => {
           await checkIfAllSubmittedPrompts();
@@ -148,13 +169,14 @@
     if (error || !players) return;
 
     const total = players.length;
-    const submittedCount = players.filter(p => p.submitted_prompt).length;
+    const submittedCount = players.filter((p) => p.submitted_prompt).length;
     console.log(`Prompt stage: total=${total}, submitted=${submittedCount}`);
     if (submittedCount === total) {
       // all have prompts => assign 2 prompts for each user
       await assignPromptsForCurrentUser();
       stage = "response1";
-      successMessage = "All players have submitted prompts! Please answer your first assigned prompt.";
+      successMessage =
+        "All players have submitted prompts! Please answer your first assigned prompt.";
     }
   }
 
@@ -165,8 +187,8 @@
    * After submitting, we fetch all prompts, assign the next prompt (cyclically) that isn’t the user's own,
    * and then switch the stage to "waiting", then to stage "response" once all others have added their prompts.
    */
-   // Submit the user's prompt or default
-   async function handleSubmitPrompt(useDefault: boolean) {
+  // Submit the user's prompt or default
+  async function handleSubmitPrompt(useDefault: boolean) {
     errorMessage = "";
     if (!userId) {
       errorMessage = "No user is signed in.";
@@ -214,7 +236,7 @@
       }
       allPlayers.sort((a, b) => a.id.localeCompare(b.id));
       const n = allPlayers.length;
-      const index = allPlayers.findIndex(p => p.id === userId);
+      const index = allPlayers.findIndex((p) => p.id === userId);
       if (index === -1) {
         errorMessage = "User not found among players.";
         return;
@@ -228,8 +250,8 @@
 
       allPrompts.sort((a, b) => a.id - b.id);
 
-      const p1 = allPrompts.find(pr => pr.player_id === owner1);
-      const p2 = allPrompts.find(pr => pr.player_id === owner2);
+      const p1 = allPrompts.find((pr) => pr.player_id === owner1);
+      const p2 = allPrompts.find((pr) => pr.player_id === owner2);
 
       assignedPrompts = [];
       if (p1) assignedPrompts.push(p1);
@@ -266,7 +288,8 @@
       if (responseIndex === 0 && assignedPrompts.length > 1) {
         responseIndex = 1;
         stage = "response2";
-        successMessage = "Ok you answered that first prompt. Now answer another one!";
+        successMessage =
+          "Ok you answered that first prompt. Now answer another one!";
       } else {
         // user answered second prompt => done
         stage = "waitingResponse";
@@ -338,17 +361,31 @@
     console.log("Drawing saved to database:", canvasImage);
   }
 
+  // NEW: fetch the players (only id and username) to determine join order for images
+  async function fetchPlayers() {
+    const { data: profilesData, error } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .eq("game_id", gameId);
+    if (error) {
+      console.error("Error fetching players:", error);
+    } else {
+      players = profilesData || [];
+    }
+  }
+
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdParam = urlParams.get("gameId");
     if (!gameIdParam) {
       alert("No game ID provided. Redirecting to waiting room.");
-      goto("/waitingroom");
+      goto("/");
       return;
     }
     gameId = Number(gameIdParam);
 
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const { data: sessionData, error: sessionError } =
+      await supabase.auth.getSession();
     userId = sessionData?.session?.user?.id || null;
     if (sessionError || !userId) {
       errorMessage = "No user is signed in.";
@@ -373,7 +410,6 @@
 
     // also do an initial check
     // await checkIfAllSubmittedResponse();
-  
 
     currentGame = await fetchGame();
     setupPlayerCountMonitoring();
@@ -381,11 +417,12 @@
     //subscribe to changes in profiles => checkIfAllSubmittedPrompts
     subscribeToPromptSubmissions();
     await checkIfAllSubmittedPrompts();
-    
+
     subscribeToResponseSubmissions();
     await checkIfAllSubmittedResponses();
 
-    
+    // NEW: fetch players so we can determine join order for images
+    await fetchPlayers();
 
     await tick();
     let tries = 10;
@@ -429,7 +466,7 @@
           event: "*",
           schema: "public",
           table: "responses",
-          filter: `game_id=eq.${gameId}`
+          filter: `game_id=eq.${gameId}`,
         },
         async () => {
           await checkIfAllSubmittedResponses();
@@ -437,7 +474,6 @@
       )
       .subscribe();
   }
-
 
   // check if all players have submitted_response = true
   async function checkIfAllSubmittedResponses() {
@@ -476,19 +512,19 @@
       }
     }
 
-    console.log(`Response stage: total=${totalPlayers}, responded2=${doneCount}`);
+    console.log(
+      `Response stage: total=${totalPlayers}, responded2=${doneCount}`
+    );
     if (doneCount === totalPlayers) {
       // all players have 2 responses => go to /voting
       goto(`/voting?gameId=${gameId}&promptIndex=0`);
     }
   }
-
 </script>
 
 <div class="game-container">
   <img src="backgrounds/bgstart.png" alt="Background" class="backgroundbox" />
   <div class="prompt-wrapper">
-
     {#if errorMessage}
       <p class="error">{errorMessage}</p>
     {/if}
@@ -506,17 +542,19 @@
           placeholder="(Optional) Type your prompt..."
         />
         <div class="button-group" style="margin-top: 1rem;">
-          <button on:click={() => handleSubmitPrompt(false)}>Submit Prompt</button>
-          <button on:click={() => handleSubmitPrompt(true)}>Use Default Prompt</button>
+          <button on:click={() => handleSubmitPrompt(false)}
+            >Submit Prompt</button
+          >
+          <button on:click={() => handleSubmitPrompt(true)}
+            >Use Default Prompt</button
+          >
         </div>
       </div>
-
     {:else if stage === "waitingPrompt"}
       <div class="prompt-container">
         <h2>Prompt submitted!</h2>
         <p>Waiting for other players to submit their prompts...</p>
       </div>
-
     {:else if stage === "response1"}
       {#if assignedPrompts.length > 0}
         <div class="prompt-container">
@@ -531,7 +569,6 @@
       {:else}
         <p>Loading assigned prompts...</p>
       {/if}
-
     {:else if stage === "response2"}
       {#if assignedPrompts.length > 1}
         <div class="prompt-container">
@@ -546,7 +583,6 @@
       {:else}
         <p>Loading second prompt...</p>
       {/if}
-
     {:else if stage === "waitingResponse"}
       <div class="prompt-container">
         <h2>You answered both prompts!</h2>
@@ -555,9 +591,20 @@
     {/if}
   </div>
 
+  <!-- NEW: Display players with images based on local state.
+       For the current user, if stage is waitingPrompt or waitingResponse, we use the idle image;
+       all other players use the writing image.
+       Join order is determined by sorting the players by id. -->
   <div class="players">
-    {#each playerimages.slice(0, playerCount) as playerimage}
-      <img src={playerimage} alt="Player" class="player" />
+    {#each players.sort((a, b) => a.id.localeCompare(b.id)) as player, i}
+      <img
+        src={player.id === userId &&
+        (stage === "waitingPrompt" || stage === "waitingResponse")
+          ? playerIdleImages[i]
+          : playerWriteImages[i]}
+        alt="Player"
+        class="player"
+      />
     {/each}
   </div>
 </div>

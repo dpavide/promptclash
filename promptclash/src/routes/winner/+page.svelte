@@ -27,7 +27,7 @@
   let responderB: any = null;
 
   let responses: any[] = [];
-  let errorMessage:string = "";
+  let errorMessage: string = "";
   let isTie = false;
   let isLastPrompt = false;
 
@@ -44,20 +44,20 @@
 
     if (!param) {
       alert("No game ID found.");
-      goto("/waitingroom");
+      goto("/");
       return;
     }
     gameId = Number(param);
     promptIndex = index ? Number(index) : 0;
-    finalMode = (finalParam === "true");
+    finalMode = finalParam === "true";
 
     if (finalMode) {
       finalScores = await fetchAllPlayersScores(gameId);
       return;
     }
 
-     // Fetch all prompts for this game (sorted by id)
-     const { data: prompts, error: promptErr } = await supabase
+    // Fetch all prompts for this game (sorted by id)
+    const { data: prompts, error: promptErr } = await supabase
       .from("prompts")
       .select("id, text, player_id")
       .eq("game_id", gameId)
@@ -74,8 +74,8 @@
     }
     currentPrompt = allPrompts[promptIndex];
 
-     // fetch the prompt's author 
-     if (currentPrompt?.player_id) {
+    // fetch the prompt's author
+    if (currentPrompt?.player_id) {
       const { data: authorProfile } = await supabase
         .from("profiles")
         .select("username")
@@ -115,7 +115,7 @@
     if (!respObj?.player_id) {
       return {
         username: "Unknown",
-        vote_count: respObj?.vote_count || 0
+        vote_count: respObj?.vote_count || 0,
       };
     }
     const { data: p } = await supabase
@@ -125,7 +125,7 @@
       .single();
     return {
       username: p?.username || "Unknown",
-      vote_count: respObj.vote_count || 0
+      vote_count: respObj.vote_count || 0,
     };
   }
 
@@ -151,45 +151,47 @@
       <li><strong>{player.username}</strong>: {player.score} points</li>
     {/each}
   </ol>
-{:else}
-  {#if currentPrompt}
-    <h1>Results for Prompt #{promptIndex + 1}</h1>
-    <h2>"{currentPrompt.text}"</h2>
-    <p>Prompt Author: <strong>{promptAuthorName}</strong></p>
+{:else if currentPrompt}
+  <h1>Results for Prompt #{promptIndex + 1}</h1>
+  <h2>"{currentPrompt.text}"</h2>
+  <p>Prompt Author: <strong>{promptAuthorName}</strong></p>
 
-    {#if errorMessage}
-      <p style="color: red;">{errorMessage}</p>
-    {/if}
-
-    {#if result}
-      {#if result.tie}
-        <p>It's a tie!</p>
-        <p>
-          <strong>{responderA?.username}</strong> got {responderA?.vote_count} votes,
-          and <strong>{responderB?.username}</strong> got {responderB?.vote_count} votes.
-        </p>
-        <p>No bonus points awarded in a tie.</p>
-      {:else}
-        <p>
-          <strong>Winner:</strong> {responderA?.username} with {responderA?.vote_count} votes
-        </p>
-        <p>
-          <strong>Loser:</strong> {responderB?.username} with {responderB?.vote_count} votes
-        </p>
-        <p>Bonus Points Awarded: {result.bonusPoints}</p>
-      {/if}
-
-      <button on:click={nextPrompt}>Next Prompt</button>
-    {:else}
-      <p>Loading results...</p>
-    {/if}
-  {:else}
-    <p>Loading prompt info...</p>
+  {#if errorMessage}
+    <p style="color: red;">{errorMessage}</p>
   {/if}
+
+  {#if result}
+    {#if result.tie}
+      <p>It's a tie!</p>
+      <p>
+        <strong>{responderA?.username}</strong> got {responderA?.vote_count} votes,
+        and <strong>{responderB?.username}</strong> got {responderB?.vote_count}
+        votes.
+      </p>
+      <p>No bonus points awarded in a tie.</p>
+    {:else}
+      <p>
+        <strong>Winner:</strong>
+        {responderA?.username} with {responderA?.vote_count} votes
+      </p>
+      <p>
+        <strong>Loser:</strong>
+        {responderB?.username} with {responderB?.vote_count} votes
+      </p>
+      <p>Bonus Points Awarded: {result.bonusPoints}</p>
+    {/if}
+
+    <button on:click={nextPrompt}>Next Prompt</button>
+  {:else}
+    <p>Loading results...</p>
+  {/if}
+{:else}
+  <p>Loading prompt info...</p>
 {/if}
 
 <style>
-  h1, h2 {
+  h1,
+  h2 {
     text-align: center;
   }
   button {
