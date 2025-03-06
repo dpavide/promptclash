@@ -6,6 +6,17 @@
   let currentGame;
   let players: { username: string }[] = [];
   let gameId;
+  export let playerimages: string[] = [
+    "gameCharacters/playerRed.png",
+    "gameCharacters/playerOrange.png",
+    "gameCharacters/playerYellow.png",
+    "gameCharacters/playerLightGreen.png",
+    "gameCharacters/playerDarkGreen.png",
+    "gameCharacters/playerBlue.png",
+    "gameCharacters/playerPurple.png",
+    "gameCharacters/playerPink.png",
+  ];
+
 
   onMount(async () => {
     // Get gameId from the URL query parameters
@@ -122,51 +133,144 @@
   }
 </script>
 
-<h1>Waiting Room</h1>
+<h1>WAITING FOR PLAYERS TO JOIN</h1>
 
-<!-- Show the game ID -->
 {#if currentGame}
-  <p>Game ID: {currentGame.id}</p>
+  <p class="game-id">Game ID: {currentGame.id}</p>
 {/if}
 
-{#if players.length > 0}
-  <div class="player-list">
-    {#each players as player}
-      <div class="player">• {player.username}</div>
+<!-- If no players have joined yet, show a waiting message -->
+{#if players.length === 0}
+  <p class="waiting-text">Waiting for players to join...</p>
+{:else}
+  <!-- Display each player in its own box -->
+  <div class="players">
+    {#each players as player, i}
+      <div class="player-box color-{i % 8}">
+        <div class="player-icon">
+          <!-- Show the corresponding image for the player’s index -->
+          <img
+            src={playerimages[i % playerimages.length]}
+            alt="Player icon"
+          />
+        </div>
+        <div class="player-label">
+          {player.username}
+        </div>
+      </div>
     {/each}
   </div>
-{:else}
-  <p>Waiting for players to join...</p>
 {/if}
 
-<button on:click={startGame} disabled={players.length < 3}>
+<!-- Start/Play button below all players -->
+<button class="start-button" on:click={startGame} disabled={players.length < 3}>
   Start Game ({players.length}/3+)
 </button>
 
 <style>
-  .player-list {
+  /* Basic page styling */
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    background-color: #4CB3FF; /* Bright blue background */
+    font-family: Arial, sans-serif;
+    text-align: center;
+    color: #000;
+  }
+
+  h1 {
+    margin: 2rem 0 1rem 0;
+    font-size: 2rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #fff;
+  }
+
+  .game-id {
+    color: #fff;
+    margin-bottom: 1rem;
+  }
+
+  .waiting-text {
+    color: #fff;
+    font-style: italic;
+    margin: 2rem 0;
+  }
+
+  /* Container for all player boxes */
+  .players {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 600px;
+    margin: 2rem auto;
+  }
+
+  /* Individual player box */
+  .player-box {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 400px;
     margin: 1rem 0;
     padding: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    border-radius: 10px;
+    color: #fff;
   }
-  .player {
-    margin: 0.5rem 0;
+
+  /* Player icon container */
+  .player-icon {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    overflow: hidden; /* so the image is clipped to a circle */
   }
-  button {
-    padding: 0.5rem 1rem;
-    font-size: 1rem;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 4px;
+
+  /* Make sure the image fits nicely in the icon circle */
+  .player-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* or "cover" if you prefer filling the circle */
+  }
+
+  .player-label {
+    font-weight: bold;
+    font-size: 1.1rem;
+  }
+
+  /* Example color classes for the boxes */
+  .color-0 { background-color: #FF4B4B; }   /* Red */
+  .color-1 { background-color: #FFA500; }   /* Orange */
+  .color-2 { background-color: #FFEB3B; color: #000; }  /* Yellow (with black text) */
+  .color-3 { background-color: #4CAF50; }   /* Green */
+  .color-4 { background-color: #009688; }   /* Teal/dark green */
+  .color-5 { background-color: #2196F3; }   /* Blue */
+  .color-6 { background-color: #9C27B0; }   /* Purple */
+  .color-7 { background-color: #E91E63; }   /* Pink */
+
+  /* The PLAY! button below the players */
+  .start-button {
+    padding: 1rem 2rem;
+    font-size: 1.2rem;
+    background-color: #fff;
+    color: #000;
+    border: 2px solid #000;
+    border-radius: 10px;
     cursor: pointer;
+    margin-bottom: 2rem;
   }
-  button:hover {
-    background-color: #0056b3;
-  }
-  button:disabled {
+  .start-button:hover {
     background-color: #ccc;
+  }
+  .start-button:disabled {
+    background-color: #999;
+    border-color: #999;
     cursor: not-allowed;
   }
 </style>
+

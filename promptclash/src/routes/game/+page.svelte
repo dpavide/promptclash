@@ -501,10 +501,42 @@
         <div class="prompt-container">
           <p><strong>Prompt #1</strong>:</p>
           <p><em>{assignedPrompts[0].text}</em></p>
-          <textarea
-            bind:value={responseInput}
-            placeholder="Type your response for prompt #1..."
-          ></textarea>
+          <!-- New container for written and drawn responses -->
+          <div class="response-area">
+            <div class="text-area-wrapper">
+              <textarea
+                bind:value={responseInput}
+                placeholder="Type your response for prompt #1..."
+              ></textarea>
+            </div>
+            <!-- Drawing area commented for now-->
+             <!-- 
+            <div class="drawing-area">
+              <p>Or draw your response:</p>
+              <canvas
+                bind:this={canvas}
+                width="420"
+                height="200"
+                on:mousedown={startDrawing}
+                on:mousemove={draw}
+                on:mouseup={stopDrawing}
+                on:mouseleave={stopDrawing}
+              ></canvas>
+              <div class="controls">
+                <label>
+                  Color: <input type="color" bind:value={color} />
+                </label>
+                <label>
+                  Size:
+                  <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
+                  {lineWidth}px
+                </label>
+                <button on:click={clearCanvas}>Clear</button>
+                <button on:click={submitDrawing}>Submit Drawing</button>
+              </div>
+            </div>
+          -->
+          </div>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>
       {:else}
@@ -516,10 +548,41 @@
         <div class="prompt-container">
           <p><strong>Prompt #2</strong>:</p>
           <p><em>{assignedPrompts[1].text}</em></p>
-          <textarea
-            bind:value={responseInput}
-            placeholder="Type your response..."
-          ></textarea>
+          <!-- New container for written and drawn responses -->
+          <div class="response-area">
+            <div class="text-area-wrapper">
+              <textarea
+                bind:value={responseInput}
+                placeholder="Type your response..."
+              ></textarea>
+            </div>
+            <!-- Drawing area commented for now-->
+            <!--<div class="drawing-area">
+              <p>Or draw your response:</p>
+              <canvas
+                bind:this={canvas}
+                width="420"
+                height="200"
+                on:mousedown={startDrawing}
+                on:mousemove={draw}
+                on:mouseup={stopDrawing}
+                on:mouseleave={stopDrawing}
+              ></canvas>
+              <div class="controls">
+                <label>
+                  Color: <input type="color" bind:value={color} />
+                </label>
+                <label>
+                  Size:
+                  <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
+                  {lineWidth}px
+                </label>
+                <button on:click={clearCanvas}>Clear</button>
+                <button on:click={submitDrawing}>Submit Drawing</button>
+              </div>
+            </div>
+            -->
+          </div>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>
       {:else}
@@ -561,7 +624,7 @@
     background-position: center;
     border-radius: 12px;
     margin-top: 10px;
-    animation: bgAnimation 1s infinite;
+    animation: bgAnimation 1s infinite ease-in-out;
   }
   @keyframes bgAnimation {
     0% {
@@ -594,7 +657,49 @@
     align-items: center;
     gap: 15px;
   }
+  /* New container to display textarea and drawing area side-by-side */
+  .response-area {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+  }
+  .text-area-wrapper {
+    flex: 1;
+  }
+  .text-area-wrapper textarea {
+    width: 100%;
+    height: 150px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  /* Resizable drawing area */
+  .drawing-area {
+    flex: 1;
+    resize: both;
+    overflow: auto;
+    min-width: 300px;
+    min-height: 200px;
+    border: 2px solid black;
+    padding: 5px;
+    box-sizing: border-box;
+  }
+  .drawing-area canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .controls {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
   textarea {
+    /* Fallback textarea styles for other areas if needed */
     width: 95%;
     height: 50px;
     margin: 10px 0;
@@ -602,6 +707,7 @@
     border: 1px solid #ddd;
     border-radius: 8px;
     resize: none;
+    box-sizing: border-box;
   }
   button {
     padding: 10px 15px;
@@ -632,43 +738,10 @@
     max-height: 150px;
     margin: 0;
   }
-  canvas {
-    border: 2px solid black;
-    cursor: crosshair;
-  }
-  .controls {
-    margin-top: 10px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
   .error {
     color: red;
   }
   .success {
     color: green;
   }
-  /* 
-  <div class="drawing-section">
-    <p>Or draw your response:</p>
-    <canvas
-      bind:this={canvas}
-      width="420"
-      height="200"
-      on:mousedown={startDrawing}
-      on:mousemove={draw}
-      on:mouseup={stopDrawing}
-      on:mouseleave={stopDrawing}
-    ></canvas>
-    <div class="controls">
-      <label>Color: <input type="color" bind:value={color} /></label>
-      <label>Size:
-        <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
-        {lineWidth}px
-      </label>
-      <button on:click={clearCanvas}>Clear</button>
-      <button on:click={submitDrawing}>Submit Drawing</button>
-    </div>
-  </div>
-  */
 </style>
