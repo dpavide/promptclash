@@ -3,20 +3,16 @@
   import { supabase } from "$lib/supabaseClient";
   import {
     fetchResponsesForGame,
-    fetchGamePrompts,
     voteForResponse,
-    calculateGameScores,
     checkAllVotedForPrompt,
-    calculatePromptScores,
   } from "$lib/api";
   import { goto } from "$app/navigation";
 
   let userId = "";
   let gameId = 0;
-
   let promptIndex: number = 0;
-  let allPrompts: any[] = [];
   let currentPrompt: any = null;
+
   let responses: Array<{
     id: number;
     text: string;
@@ -24,15 +20,15 @@
     vote_count: number;
   }> = [];
 
-  let hasVoted = false;
-  let subscription: any;
-  let VotesSubscription: any;
   let errorMessage = "";
-
-  let playersWhoCanVote = 0;
-  let playersCount = 0;
   let responderIDs = new Set<string>();
+  let playersWhoCanVote = 0;
+  let playersCount = 0;  
 
+  let hasVoted = false;
+  let VotesSubscription: any = null;
+  let gameSubscription: any = null;
+  
   //not needed right now
   let groups: Record<number, { prompt_text: string; responses: any[] }> = {};
 
@@ -46,7 +42,6 @@
       return;
     }
     playersCount = data.length;
-    // For example, if the two responders don’t vote:
     playersWhoCanVote = playersCount - 2;
   }
 
@@ -71,12 +66,55 @@
     return true;
   }
 
-  // Combined 2 functions: Fetch the responses for the current prompt & Subscribe to the responses table.
-  async function fetchCurrentResponsesAndSetupSubscription() {
-    if (!currentPrompt) {
-      console.warn("No current prompt to fetch responses for.");
-      return;
-    }
+  function setupRealtimeSubscriptions() {
+    // Votes table => update local vote counts => check if all voted => goto
+    VotesSubscription = supabase
+      .channel("prompt-votes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "votes",
+          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt?.id}`
+        },
+        async () => {
+          // re-fetch local vote counts
+          await refreshVoteCounts();
+          // check if all voted => goto winner
+          const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt?.id, playersWhoCanVote);
+          if (allVoted) {
+            goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
+          }
+        }
+      )
+      .subscribe();
+
+    // Game table => if current_prompt_index changes => universal redirect
+    gameSubscription = supabase
+      .channel("game-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "game",
+          filter: `id=eq.${gameId}`
+        },
+        (payload) => {
+          const newIndex = payload.new.current_prompt_index;
+          if (newIndex !== promptIndex) {
+            // universal redirect
+            goto(`/voting?gameId=${gameId}&promptIndex=${newIndex}`);
+          }
+        }
+      )
+      .subscribe();
+  }
+
+  // Combined 2 functions: Fetch the responses for the current prompt
+  async function fetchCurrentResponses() {
+    if (!currentPrompt) return;
     const { data: responsesData, error: responsesError } = await supabase
       .from("responses")
       .select("id, text, player_id")
@@ -95,36 +133,39 @@
       id: r.id,
       text: r.text?.trim() || "{no response given}",
       player_id: r.player_id,
-      vote_count: 0,
+      vote_count: 0
     }));
 
-    VotesSubscription = supabase
-      .channel("prompt-votes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "votes",
-          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt.id}`,
-        },
-        async () => {
-          await refreshVoteCounts(); // function that refetches votes
-          const allVoted = await checkAllVotedForPrompt(
-            gameId,
-            currentPrompt.id,
-            playersWhoCanVote
-          );
-          if (allVoted) {
-            goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
-          }
-        }
-      )
-      .subscribe();
-
-    // Immediately do a refresh of vote counts
     await refreshVoteCounts();
   }
+
+  //   VotesSubscription = supabase
+  //     .channel("prompt-votes")
+  //     .on(
+  //       "postgres_changes",
+  //       {
+  //         event: "*",
+  //         schema: "public",
+  //         table: "votes",
+  //         filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt.id}`,
+  //       },
+  //       async () => {
+  //         await refreshVoteCounts(); // function that refetches votes
+  //         const allVoted = await checkAllVotedForPrompt(
+  //           gameId,
+  //           currentPrompt.id,
+  //           playersWhoCanVote
+  //         );
+  //         if (allVoted) {
+  //           goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
+  //         }
+  //       }
+  //     )
+  //     .subscribe();
+
+  //   // Immediately do a refresh of vote counts
+  //   await refreshVoteCounts();
+  // }
 
   async function refreshVoteCounts() {
     if (!currentPrompt) return;
@@ -151,48 +192,49 @@
 
   // Fetch the current prompt (based on promptIndex) and its 2 responses.
   async function fetchPromptAndResponses() {
-    try {
-      // Fetch all prompts for this game (sorted by id).
-      const { data: promptList, error: pErr } = await supabase
-        .from("prompts")
-        .select("id, text, player_id")
-        .eq("game_id", gameId)
-        .order("id", { ascending: true });
-      if (pErr || !promptList || promptList.length === 0) {
-        errorMessage = "No prompts found for this game.";
-        return false;
-      }
-      // If promptIndex exceeds list length, finish voting.
-      if (promptIndex >= promptList.length) {
-        goto(`/winner?gameId=${gameId}&final=true`);
-        return false;
-      }
-      currentPrompt = promptList[promptIndex];
+    // 1) fetch all prompts for this game
+    const { data: promptList, error: pErr } = await supabase
+      .from("prompts")
+      .select("id, text, player_id")
+      .eq("game_id", gameId)
+      .order("id", { ascending: true });
 
-      // Fetch responses for this prompt.
-      const { data: respList, error: rErr } = await supabase
-        .from("responses")
-        .select("id, text, player_id")
-        .eq("game_id", gameId)
-        .eq("prompt_id", currentPrompt.id);
-      if (rErr || !respList || respList.length < 2) {
-        errorMessage = "Not enough responses found for this prompt.";
-        return false;
-      }
-      // Map responses: use r.text (or fallback to a default message if empty)
-      responses = respList.map((r) => ({
-        id: r.id,
-        text:
-          r.text && r.text.trim().length > 0 ? r.text : "{no response given}",
-        player_id: r.player_id,
-        vote_count: 0, // vote counts will be updated by subscription.
-      }));
-      return true;
-    } catch (err) {
-      console.error("Error in fetchPromptAndResponses:", err);
-      errorMessage = "Error loading prompt/responses.";
+    if (pErr || !promptList || promptList.length === 0) {
+      errorMessage = "No prompts found for this game.";
       return false;
     }
+    // if promptIndex >= promptList.length => final scoreboard
+    if (promptIndex >= promptList.length) {
+      goto(`/winner?gameId=${gameId}&final=true`);
+      return false;
+    }
+
+    currentPrompt = promptList[promptIndex];
+
+    // 2) fetch the 2 responses for currentPrompt
+    const { data: respData, error: respErr } = await supabase
+      .from("responses")
+      .select("id, text, player_id")
+      .eq("game_id", gameId)
+      .eq("prompt_id", currentPrompt.id);
+    if (respErr || !respData || respData.length < 2) {
+      errorMessage = "Not enough responses found for this prompt.";
+      return false;
+    }
+    // identify the responders
+    responderIDs = new Set(respData.map(r => r.player_id));
+
+    // Initialize local responses array
+    responses = respData.map(r => ({
+      id: r.id,
+      text: r.text?.trim() || "{no response given}",
+      player_id: r.player_id,
+      vote_count: 0
+    }));
+
+    // do an initial refresh of the vote counts
+    await refreshVoteCounts();
+    return true;
   }
 
   // Fetch responses, prompts, and vote counts, then group them.
@@ -288,27 +330,24 @@
       alert("You can't vote for your own response!");
       return;
     }
+    if (responsePlayerId === userId) {
+      alert("You cannot vote on your own response. Stop trying bruh 💀");
+      return;
+    }
+    if (hasVoted) {
+      alert("You have already voted!");
+      return;
+    }
     try {
-      const voteResult = await voteForResponse(
-        responseId,
-        userId,
-        gameId,
-        currentPrompt.id
-      );
+      const voteResult = await voteForResponse(responseId, userId, gameId, currentPrompt.id);
       if (voteResult?.error) {
         errorMessage = "Failed to submit vote.";
         return;
       }
-      // after voting, check if everyone who was allowed to vote did
-      const allVoted = await checkAllVotedForPrompt(
-        gameId,
-        currentPrompt.id,
-        playersWhoCanVote
-      );
+      hasVoted = true;
+      const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt.id, playersWhoCanVote);
       if (allVoted) {
         goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
-      } else {
-        errorMessage = "Waiting for others to vote...";
       }
     } catch (error) {
       console.error("Error voting:", error);
@@ -351,7 +390,7 @@
     const PromptIndexParameter = urlParams.get("promptIndex");
     if (!gameIdParameter) {
       alert("Game ID not specified.");
-      goto("/");
+      goto("/waitingroom");
       return;
     }
     gameId = Number(gameIdParameter);
@@ -364,51 +403,48 @@
     await fetchPlayerCount();
 
     const ok = await fetchCurrentPrompt();
-    if (!ok || !currentPrompt) {
-      return;
-    }
-    await fetchCurrentResponsesAndSetupSubscription();
+    if (!ok || !currentPrompt) return;
+
+    await fetchCurrentResponses();
+    
+    setupRealtimeSubscriptions();
   });
 
   onDestroy(() => {
-    if (
-      VotesSubscription &&
-      typeof VotesSubscription.unsubscribe === "function"
-    ) {
+    if (VotesSubscription && typeof VotesSubscription.unsubscribe === "function") {
       VotesSubscription.unsubscribe();
+    }
+    if (gameSubscription && typeof gameSubscription.unsubscribe === "function") {
+      gameSubscription.unsubscribe();
     }
   });
 </script>
 
-<div>
-  <h1>Voting on Prompt #{promptIndex + 1}</h1>
+<h1>Voting on Prompt #{promptIndex + 1}</h1>
 
-  {#if currentPrompt}
-    <p><strong>Prompt:</strong> {currentPrompt.text}</p>
+{#if currentPrompt}
+  <p><strong>Prompt:</strong> {currentPrompt.text}</p>
 
-    {#each responses as r (r.id)}
-      <div style="margin-bottom: 1rem;">
-        <p>{r.text}</p>
-        <p>Votes: {r.vote_count}</p>
+  {#each responses as r (r.id)}
+    <div style="margin-bottom: 1rem;">
+      <p>{r.text}</p>
+      <p>Votes: {r.vote_count}</p>
 
-        {#if responderIDs.has(userId)}
-          <!-- You are a responder => can't vote on ANY response -->
-          <p style="color: gray;">(Responders cannot vote)</p>
-        {:else}
-          <!-- normal user => can vote, unless it's your own response (optional) -->
-          {#if r.player_id === userId}
-            <p style="color: gray;">(Your own response)</p>
-          {:else}
-            <button on:click={() => handleVote(r.id, r.player_id)}>Vote</button>
-          {/if}
-        {/if}
-      </div>
-    {/each}
-  {:else}
-    <p>Loading prompt...</p>
-  {/if}
+      {#if responderIDs.has(userId)}
+        <p style="color: gray;">(You are a responder; no voting)</p>
+      {:else if r.player_id === userId}
+        <p style="color: gray;">(Your own response)</p>
+      {:else if hasVoted}
+        <p style="color: gray;">(You already voted!)</p>
+      {:else}
+        <button on:click={() => handleVote(r.id, r.player_id)}>Vote</button>
+      {/if}
+    </div>
+  {/each}
+{:else}
+  <p>Loading prompt...</p>
+{/if}
 
-  {#if errorMessage}
-    <p style="color: red;">{errorMessage}</p>
-  {/if}
-</div>
+{#if errorMessage}
+  <p style="color: red;">{errorMessage}</p>
+{/if}

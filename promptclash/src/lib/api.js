@@ -282,7 +282,12 @@ export async function voteForResponse(responseId, userId, gameId, promptId) {
   console.log('Vote for response called');
   const { error: insertErr } = await supabase
     .from('votes')
-    .insert([{ response_id: responseId, user_id: userId, game_id: gameId, prompt_id: promptId }]);
+    .insert([{ 
+      response_id: responseId, 
+      user_id: userId, 
+      game_id: gameId, 
+      prompt_id: promptId 
+    }]);
 
   if (insertErr) {
     console.error('Error casting vote:', insertErr  );
