@@ -32,8 +32,6 @@
   let assignedPrompt: any = null;
   let responseInput = "";
   let responseIndex = 0;
-  let allSubmitted = false;
-  let iHaveSubmitted = false;
 
   // For subscription logic:
   let unsubscribeCount: any;
@@ -107,8 +105,7 @@
       }
   }
 
-  // NEW: players array – we fetch player ids (and usernames) from the database to determine join order
-  let players: { id: string; username?: string }[] = [];
+  let players: { id: string; username?: string; submitted_prompt?: boolean; submitted_response?: boolean }[] = [];
 
   async function fetchGame() {
     const { data: gameData, error: gameError } = await supabase
@@ -124,19 +121,19 @@
     return gameData;
   }
 
-  async function fetchPrompt(promptId: number) {
-    const { data: fetchedPrompt, error: promptError } = await supabase
-      .from("prompts")
-      .select("*")
-      .eq("id", promptId)
-      .single();
-    if (promptError || !fetchedPrompt) {
-      console.error("Error fetching prompt:", promptError);
-      goto("/");
-      return null;
-    }
-    return fetchedPrompt;
-  }
+  // async function fetchPrompt(promptId: number) {
+  //   const { data: fetchedPrompt, error: promptError } = await supabase
+  //     .from("prompts")
+  //     .select("*")
+  //     .eq("id", promptId)
+  //     .single();
+  //   if (promptError || !fetchedPrompt) {
+  //     console.error("Error fetching prompt:", promptError);
+  //     goto("/");
+  //     return null;
+  //   }
+  //   return fetchedPrompt;
+  // }
 
   async function setupPlayerCountMonitoring() {
     try {
@@ -178,7 +175,9 @@
           filter: `game_id=eq.${gameId}`,
         },
         async () => {
+          if (stage === "prompt" || stage === "waitingPrompt") {
           await checkIfAllSubmittedPrompts();
+          }
         }
       )
       .subscribe();
@@ -205,10 +204,10 @@
   }
 
   /**
-   * handleSubmitPrompt(useDefault: boolean)
-   * - If useDefault is true, we pass an empty string so the API picks one of your default prompts.
-   * - Otherwise, we use the text typed by the user.
-   * After submitting, we fetch all prompts, assign the next prompt (cyclically) that isn’t the user's own,
+   * Handle And Submit Prompt (useDefault: boolean)
+   * - If useDefault is true, pass an empty string so the API picks one of the default prompts.
+   * - Otherwise, use the text typed by the user.
+   * After submitting, fetch all prompts, assign the next prompt (cyclically) that isn’t the user's own,
    * and then switch the stage to "waiting", then to stage "response" once all others have added their prompts.
    */
   // Submit the user's prompt or default
@@ -319,6 +318,7 @@
         // user answered second prompt => done
         stage = "waitingResponse";
         successMessage = "You answered both prompts. Waiting for others...";
+        await supabase.from("profiles").update({ submitted_response: true }).eq("id", userId);
       }
     } catch (err) {
       console.error("Error submitting response:", err);
@@ -386,11 +386,18 @@
     console.log("Drawing saved to database:", canvasImage);
   }
 
+  async function fetchPlayersAndSubscribe() {
+    await fetchPlayers();
+    // Subscribe to realtime updates on profiles.
+    const unsubscribePlayers = subscribeToPlayerUpdates();
+    return unsubscribePlayers;
+  }
+
   // NEW: fetch the players (only id and username) to determine join order for images
   async function fetchPlayers() {
     const { data: profilesData, error } = await supabase
       .from("profiles")
-      .select("id, username")
+      .select("id, username, submitted_prompt, submitted_response")
       .eq("game_id", gameId);
     if (error) {
       console.error("Error fetching players:", error);
@@ -399,12 +406,40 @@
     }
   }
 
+  function subscribeToPlayerUpdates() {
+    const channel = supabase
+      .channel("profile-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
+          filter: `game_id=eq.${gameId}`
+        },
+        async () => {
+          await fetchPlayers();
+        }
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }
+
+  function getPlayerImage(player, index) {
+    if (stage === "prompt" || stage === "waitingPrompt") {
+      return player.submitted_prompt ? playerIdleImages[index] : playerWriteImages[index];
+    } else if (stage === "response1" || stage === "response2" || stage === "waitingResponse") {
+      return player.submitted_response ? playerIdleImages[index] : playerWriteImages[index];
+    }
+    return playerWriteImages[index];
+  }
+
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdParam = urlParams.get("gameId");
     if (!gameIdParam) {
       alert("No game ID provided. Redirecting to waiting room.");
-      goto("/");
+      goto("/waitingroom");
       return;
     }
     gameId = Number(gameIdParam);
@@ -416,38 +451,18 @@
       errorMessage = "No user is signed in.";
     }
 
-    // // subscribe to changes in profiles => see if all players have submitted
-    // subscription = supabase
-    //   .channel("prompt-submissions")
-    //   .on(
-    //     "postgres_changes",
-    //     {
-    //       event: "*",
-    //       schema: "public",
-    //       table: "profiles",
-    //       filter: `game_id=eq.${gameId}`
-    //     },
-    //     async () => {
-    //       await checkIfAllSubmittedResponse();
-    //     }
-    //   )
-    //   .subscribe();
-
-    // also do an initial check
-    // await checkIfAllSubmittedResponse();
-
     currentGame = await fetchGame();
+    await fetchPlayers();
+
     setupPlayerCountMonitoring();
 
-    //subscribe to changes in profiles => checkIfAllSubmittedPrompts
     subscribeToPromptSubmissions();
     await checkIfAllSubmittedPrompts();
 
     subscribeToResponseSubmissions();
     await checkIfAllSubmittedResponses();
 
-    // NEW: fetch players so we can determine join order for images
-    await fetchPlayers();
+    profilesSubscription = subscribeToPlayerUpdates();
 
     await tick();
     let tries = 10;
@@ -478,6 +493,9 @@
     }
     if (promptSubscription) supabase.removeChannel(promptSubscription);
     if (responseSubscription) supabase.removeChannel(responseSubscription);
+    if (profilesSubscription && typeof profilesSubscription === "function") {
+      profilesSubscription();
+    } 
   });
 
   // subscribe => each time a user updates 'responses', we check if all are done
@@ -564,16 +582,11 @@
         <input
           type="text"
           bind:value={promptInput}
-          maxlength=100
           placeholder="Type something..."
         />
         <div class="button-group" style="margin-top: 1rem;">
-          <button on:click={() => handleSubmitPrompt(false)}
-            >Submit Prompt</button
-          >
-          <button on:click={() => handleSubmitPrompt(true)}
-            >Use Default Prompt</button
-          >
+          <button on:click={() => handleSubmitPrompt(false)}>Submit Prompt</button>
+          <button on:click={() => handleSubmitPrompt(true)}>Use Default Prompt</button>
         </div>
       </div>
     {:else if stage === "waitingPrompt"}
@@ -586,11 +599,7 @@
         <div class="prompt-container">
           <p><strong>Prompt #1</strong>:</p>
           <p><em>{assignedPrompts[0].text}</em></p>
-          <textarea
-            bind:value={responseInput}
-            placeholder="Type your answer..."
-            maxlength=100
-          ></textarea>
+          <textarea bind:value={responseInput} placeholder="Type your answer..."></textarea>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>
       {:else}
@@ -604,7 +613,6 @@
           <textarea
             bind:value={responseInput}
             placeholder="Type your response..."
-            maxlength=100
           ></textarea>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>
@@ -625,14 +633,7 @@
        Join order is determined by sorting the players by id. -->
   <div class="players">
     {#each players.sort((a, b) => a.id.localeCompare(b.id)) as player, i}
-      <img
-        src={player.id === userId &&
-        (stage === "waitingPrompt" || stage === "waitingResponse")
-          ? playerIdleImages[i]
-          : playerWriteImages[i]}
-        alt="Player"
-        class="player"
-      />
+      <img src= {getPlayerImage(player, i)} alt="Player" class="player"/>
     {/each}
   </div>
 </div>
