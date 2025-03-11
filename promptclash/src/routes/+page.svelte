@@ -143,6 +143,7 @@
         bind:value={username}
         placeholder="Name"
         class="name-input"
+        maxlength=25
         required
       />
 

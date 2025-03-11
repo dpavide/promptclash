@@ -564,6 +564,7 @@
         <input
           type="text"
           bind:value={promptInput}
+          maxlength=100
           placeholder="Type something..."
         />
         <div class="button-group" style="margin-top: 1rem;">
@@ -588,6 +589,7 @@
           <textarea
             bind:value={responseInput}
             placeholder="Type your answer..."
+            maxlength=100
           ></textarea>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>
@@ -602,6 +604,7 @@
           <textarea
             bind:value={responseInput}
             placeholder="Type your response..."
+            maxlength=100
           ></textarea>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>
