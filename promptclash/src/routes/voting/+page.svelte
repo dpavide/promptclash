@@ -392,7 +392,7 @@
 
     await fetchCurrentResponses();
     
-    setupRealtimeSubscriptions();
+    await setupRealtimeSubscriptions();
   });
 
   onDestroy(() => {
