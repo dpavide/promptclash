@@ -564,7 +564,7 @@
         <input
           type="text"
           bind:value={promptInput}
-          placeholder="(Optional) Type your prompt..."
+          placeholder="Type something..."
         />
         <div class="button-group" style="margin-top: 1rem;">
           <button on:click={() => handleSubmitPrompt(false)}
@@ -587,7 +587,7 @@
           <p><em>{assignedPrompts[0].text}</em></p>
           <textarea
             bind:value={responseInput}
-            placeholder="Type your response for prompt #1..."
+            placeholder="Type your answer..."
           ></textarea>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>

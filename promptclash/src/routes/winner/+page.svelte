@@ -98,8 +98,7 @@
     }
     result = res;
 
-    // if tie => we have respA & respB
-    // if not tie => we have winner & loser
+    // if tie => we have respA & respB; otherwise, we have winner & loser
     if (result.tie) {
       // fetch their names from profiles
       responderA = await fetchResponderInfo(result.respA);
@@ -114,6 +113,8 @@
     if (subscription && typeof subscription.unsubscribe === "function") {
       subscription.unsubscribe();
     }
+    // ─── NEW: Clear decoration animation interval
+    clearInterval(decorationInterval);
   });
 
   function subscribeToGameChanges() {
@@ -168,9 +169,19 @@
       console.error("Error updating next prompt index:", error);
     }
   }
+
+  // ─── NEW: Decoration animation variables and interval setup ─────────
+  let decorationSet = 0;
+  let decorationInterval;
+  onMount(() => {
+    decorationInterval = setInterval(() => {
+      decorationSet = decorationSet === 0 ? 1 : 0;
+    }, 1000);
+  });
 </script>
 
 {#if finalMode}
+  <!-- Final Scoreboard remains as before -->
   <h1>Final Scoreboard</h1>
   {#if errorMessage}
     <p style="color: red;">{errorMessage}</p>
@@ -181,40 +192,73 @@
     {/each}
   </ol>
 {:else if currentPrompt}
-  <h1>Results for Prompt #{promptIndex + 1}</h1>
-  <h2>"{currentPrompt.text}"</h2>
-  <p>Prompt Author: <strong>{promptAuthorName}</strong></p>
-  {#if errorMessage}
-    <p style="color: red;">{errorMessage}</p>
-  {/if}
+  <!-- New UI layout with a styled frame and two-column result display -->
+  <div class="page-container">
+    <div class="frame">
+      <h1>Results for Prompt #{promptIndex + 1}</h1>
+      <h2>"{currentPrompt.text}"</h2>
+      <p>Prompt Author: <strong>{promptAuthorName}</strong></p>
+      {#if errorMessage}
+        <p style="color: red;">{errorMessage}</p>
+      {/if}
 
-  {#if result}
-    {#if result.tie}
-      <p>It's a tie!</p>
-      <p>
-        <strong>{responderA?.username}</strong> got {responderA?.vote_count} votes,
-        and <strong>{responderB?.username}</strong> got {responderB?.vote_count} votes.
-      </p>
-      <p>No bonus points awarded in a tie.</p>
-    {:else}
-      <p>
-        <strong>Winner:</strong> {responderA?.username} with {responderA?.vote_count} votes
-      </p>
-      <p>
-        <strong>Loser:</strong> {responderB?.username} with {responderB?.vote_count} votes
-      </p>
-      <p>Bonus Points Awarded: {result.bonusPoints}</p>
-    {/if}
-
-    <button on:click={nextPrompt}>Next Prompt</button>
-  {:else}
-    <p>Loading results...</p>
-  {/if}
+      {#if result}
+        {#if result.tie}
+          <h2>This round's a draw!</h2>
+          <div class="tieContainer">
+            <div class="tieColumn">
+              <div class="tiePoints">+{responderA?.vote_count * 100}</div>
+              <div class="tieImage">
+                <img src="gameCharacters/playerRed.png" alt="Player Image">
+              </div>
+              <div class="tieName">{responderA?.username}</div>
+            </div>
+            <div class="tieColumn">
+              <div class="tiePoints">+{responderB?.vote_count * 100}</div>
+              <div class="tieImage">
+                <img src="gameCharacters/playerBlue.png" alt="Player Image">
+              </div>
+              <div class="tieName">{responderB?.username}</div>
+            </div>
+          </div>
+          <p>No bonus points awarded in a tie.</p>
+        {:else}
+          <div class="winnerColumn">
+            <div class="winnerPoints"><br><br>+{result.bonusPoints}</div>
+            <div class="winnerImage">
+              <img src="gameCharacters/playerRed.png" alt="Winner Image">
+            </div>
+            <div class="winnerName">Winner:<br>{responderA?.username}</div>
+          </div>
+          <div class="loserColumn">
+            <div class="loserPoints"><br><br>+{responderB?.vote_count * 100}</div>
+            <div class="loserImage">
+              <img src="gameCharacters/playerBlue.png" alt="Loser Image">
+            </div>
+            <div class="loserName">2nd:<br>{responderB?.username}</div>
+          </div>
+        {/if}
+        <button on:click={nextPrompt}>Next Prompt</button>
+      {:else}
+        <p>Loading results...</p>
+      {/if}
+    </div>
+  </div>
 {:else}
   <p>Loading prompt info...</p>
 {/if}
 
+<!-- Decoration Images at the very bottom with animation -->
+<div class="decorations">
+  <img src={decorationSet === 0 ? "gameCharacters/PlayerOrangeIdle.png" : "gameCharacters/PlayerOrangeWrite.png"} alt="Decoration Orange">
+  <img src={decorationSet === 0 ? "gameCharacters/PlayerYellowIdle.png" : "gameCharacters/PlayerYellowWrite.png"} alt="Decoration Yellow">
+  <img src={decorationSet === 0 ? "gameCharacters/PlayerDarkGreenIdle.png" : "gameCharacters/PlayerDarkGreenWriting.png"} alt="Decoration Dark Green">
+  <img src={decorationSet === 0 ? "gameCharacters/PlayerLightGreenIdle.png" : "gameCharacters/PlayerLightGreenWrite.png"} alt="Decoration Light Green">
+  <img src={decorationSet === 0 ? "gameCharacters/PlayerPurpleIdle.png" : "gameCharacters/PlayerPurpleWrite.png"} alt="Decoration Purple">
+</div>
+
 <style>
+  /* Styles from the current winner page */
   h1,
   h2 {
     text-align: center;
@@ -226,5 +270,76 @@
     padding: 10px 20px;
     margin-top: 20px;
     cursor: pointer;
+  }
+
+  /* New styles from the older version for enhanced layout */
+  .page-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+  }
+  .frame {
+    --frame-scale: 1.2;
+    --base-offset: 50px;
+    display: flex;
+    flex-direction: row;
+    width: 95vw;
+    max-width: 1200px;
+    aspect-ratio: 2 / 1;
+    position: relative;
+    background-image: url("backgrounds/bg1.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    animation: bgAnimation 1.5s infinite;
+    justify-content: space-around;
+    align-items: center;
+    transform: scale(var(--frame-scale));
+    margin-bottom: 10px;
+    padding: 1rem;
+  }
+  .frame > * {
+    transform: translateY(calc(-1 * var(--base-offset) * var(--frame-scale)));
+  }
+  .winnerColumn, .loserColumn, .tieColumn {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+    margin: 1rem;
+  }
+  .winnerImage img, .loserImage img, .tieImage img {
+    width: 100%;
+    max-width: 100px;
+    height: auto;
+    display: block;
+    margin: auto;
+  }
+  .decorations {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+  }
+  .decorations img {
+    max-width: 150px;
+    height: auto;
+  }
+  @keyframes bgAnimation {
+    0% {
+      background-image: url("backgrounds/bg1.png");
+    }
+    33% {
+      background-image: url("backgrounds/bg2.png");
+    }
+    66% {
+      background-image: url("backgrounds/bg3.png");
+    }
+    100% {
+      background-image: url("backgrounds/bg1.png");
+    }
   }
 </style>
