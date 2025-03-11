@@ -26,7 +26,7 @@
   let playersCount = 0;  
 
   let hasVoted = false;
-  let VotesSubscription: any = null;
+  let votesSubscription: any = null;
   let gameSubscription: any = null;
   
   //not needed right now
@@ -68,7 +68,7 @@
 
   function setupRealtimeSubscriptions() {
     // Votes table => update local vote counts => check if all voted => goto
-    VotesSubscription = supabase
+    votesSubscription = supabase
       .channel("prompt-votes")
       .on(
         "postgres_changes",
@@ -123,6 +123,11 @@
         }
       )
       .subscribe();
+      return () => {
+        if (votesSubscription) {
+          supabase.removeChannel(votesSubscription);
+        }
+      }
   }
 
   // Combined 2 functions: Fetch the responses for the current prompt
@@ -392,12 +397,13 @@
 
     await fetchCurrentResponses();
     
-    await setupRealtimeSubscriptions();
+    const cleanup = setupRealtimeSubscriptions();
+    onDestroy(cleanup);
   });
 
   onDestroy(() => {
-    if (VotesSubscription && typeof VotesSubscription.unsubscribe === "function") {
-      VotesSubscription.unsubscribe();
+    if (votesSubscription && typeof votesSubscription.unsubscribe === "function") {
+      votesSubscription.unsubscribe();
     }
     if (gameSubscription && typeof gameSubscription.unsubscribe === "function") {
       gameSubscription.unsubscribe();

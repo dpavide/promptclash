@@ -160,15 +160,13 @@
 
   async function nextPrompt() {
     const newIndex = promptIndex + 1;
-    const { error } = await supabase
-      .from("game")
-      .update({ current_prompt_index: newIndex })
-      .eq("id", gameId);
+    console.log(newIndex)
 
-    if (error) {
-      console.error("Error updating next prompt index:", error);
+    if (newIndex !== promptIndex) {
+            // universal redirect
+            goto(`/voting?gameId=${gameId}&promptIndex=${newIndex}`);
+      }
     }
-  }
 
   // ─── NEW: Decoration animation variables and interval setup ─────────
   let decorationSet = 0;
