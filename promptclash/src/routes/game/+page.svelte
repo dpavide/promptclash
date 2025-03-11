@@ -83,6 +83,30 @@
   let color: string = "#000000";
   let lineWidth: number = 5;
 
+  async function checkProfanity(text: string): Promise<boolean> {
+      try {
+          console.log("Checking profanity for:", text);
+          const res = await fetch(`https://api.api-ninjas.com/v1/profanityfilter?text=${encodeURIComponent(text)}`, {
+              headers: {
+                  "X-Api-Key": "YegnxWw3X0xgvCkPMEaUCg==ugPzwG3b5VAktHVf"
+              }
+          });
+
+          if (!res.ok) {
+              throw new Error(`API Error: ${res.status} ${await res.text()}`);
+          }
+
+          const result = await res.json();
+          console.log("Profanity API result:", result);
+
+          // Check if bad words were detected
+          return result.censored;
+      } catch (error) {
+          console.error("Error checking profanity:", error);
+          return false; // If error occurs, assume no profanity to avoid blocking submissions unfairly
+      }
+  }
+
   // NEW: players array – we fetch player ids (and usernames) from the database to determine join order
   let players: { id: string; username?: string }[] = [];
 
@@ -278,9 +302,10 @@
       errorMessage = "Could not find the assigned prompt to answer.";
       return;
     }
+    const profanityCheckedAnswer = await checkProfanity(responseInput);
     try {
       // 1) Submit the response
-      await submitResponse(gameId, userId, targetPrompt.id, responseInput);
+      await submitResponse(gameId, userId, targetPrompt.id, profanityCheckedAnswer);
       // 2) Clear the input
       responseInput = "";
 
