@@ -9,14 +9,6 @@
     submitResponse,
   } from "$lib/api";
 
-  // We'll define five stages:
-  // 1) "prompt"
-  // 2) "waitingPrompt"
-  // 3) "response1"
-  // 4) "response2"
-  // 5) "waitingResponse"
-  // Then we redirect to /voting when all players have 2 responses in 'responses' table.
-
   let stage:
     | "prompt"
     | "waitingPrompt"
@@ -296,6 +288,11 @@
       errorMessage = "No user is signed in.";
       return;
     }
+    if (!responseInput.trim()) {
+      errorMessage = "Response cannot be empty.";
+      return;
+    }
+
     // The user is responding to assignedPrompts[responseIndex].
     const targetPrompt = assignedPrompts[responseIndex];
     if (!targetPrompt) {
@@ -308,6 +305,7 @@
       await submitResponse(gameId, userId, targetPrompt.id, profanityCheckedAnswer);
       // 2) Clear the input
       responseInput = "";
+      errorMessage = "";
 
       // if we are on the first prompt => move on to second
       if (responseIndex === 0 && assignedPrompts.length > 1) {
@@ -415,26 +413,6 @@
     if (sessionError || !userId) {
       errorMessage = "No user is signed in.";
     }
-
-    // // subscribe to changes in profiles => see if all players have submitted
-    // subscription = supabase
-    //   .channel("prompt-submissions")
-    //   .on(
-    //     "postgres_changes",
-    //     {
-    //       event: "*",
-    //       schema: "public",
-    //       table: "profiles",
-    //       filter: `game_id=eq.${gameId}`
-    //     },
-    //     async () => {
-    //       await checkIfAllSubmittedResponse();
-    //     }
-    //   )
-    //   .subscribe();
-
-    // also do an initial check
-    // await checkIfAllSubmittedResponse();
 
     currentGame = await fetchGame();
     setupPlayerCountMonitoring();
@@ -619,10 +597,6 @@
     {/if}
   </div>
 
-  <!-- NEW: Display players with images based on local state.
-       For the current user, if stage is waitingPrompt or waitingResponse, we use the idle image;
-       all other players use the writing image.
-       Join order is determined by sorting the players by id. -->
   <div class="players">
     {#each players.sort((a, b) => a.id.localeCompare(b.id)) as player, i}
       <img

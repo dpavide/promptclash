@@ -88,24 +88,37 @@
           }
         }
       )
-      .subscribe();
-
-    // Game table => if current_prompt_index changes => universal redirect
-    gameSubscription = supabase
-      .channel("game-changes")
       .on(
         "postgres_changes",
         {
-          event: "UPDATE",
+          event: "*",
           schema: "public",
-          table: "game",
+          table: "responses",
+          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt?.id}`
+        },
+        async () => {
+          // re-fetch local vote counts
+          await refreshVoteCounts();
+          // check if all voted => goto winner
+          const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt?.id, playersWhoCanVote);
+          if (allVoted) {
+            goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
           filter: `id=eq.${gameId}`
         },
         (payload) => {
           const newIndex = payload.new.current_prompt_index;
           if (newIndex !== promptIndex) {
             // universal redirect
-            goto(`/voting?gameId=${gameId}&promptIndex=${newIndex}`);
+            goto(`/winner?gameId=${gameId}&promptIndex=${newIndex}`);
           }
         }
       )
@@ -138,34 +151,6 @@
 
     await refreshVoteCounts();
   }
-
-  //   VotesSubscription = supabase
-  //     .channel("prompt-votes")
-  //     .on(
-  //       "postgres_changes",
-  //       {
-  //         event: "*",
-  //         schema: "public",
-  //         table: "votes",
-  //         filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt.id}`,
-  //       },
-  //       async () => {
-  //         await refreshVoteCounts(); // function that refetches votes
-  //         const allVoted = await checkAllVotedForPrompt(
-  //           gameId,
-  //           currentPrompt.id,
-  //           playersWhoCanVote
-  //         );
-  //         if (allVoted) {
-  //           goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
-  //         }
-  //       }
-  //     )
-  //     .subscribe();
-
-  //   // Immediately do a refresh of vote counts
-  //   await refreshVoteCounts();
-  // }
 
   async function refreshVoteCounts() {
     if (!currentPrompt) return;
