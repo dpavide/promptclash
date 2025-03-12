@@ -140,7 +140,7 @@
             .on('postgres_changes', {
                 event: '*', // Listen for all changes
                 schema: 'public',
-                table: 'profiles',
+                table: 'votes',
                 filter: `game_id=eq.${gameId}`
             }, async () => {
                 // Refresh responses when any vote changes
