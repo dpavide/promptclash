@@ -333,6 +333,8 @@ export async function checkAllVotedForPrompt(gameId, promptId, neededVoters) {
     .eq('game_id', gameId)
     .eq('prompt_id', promptId);
 
+  console.log("This is the vote data", votes)
+
   if (votesErr || !votes) {
     console.error("Error fetching votes for prompt", promptId, votesErr);
     return false;

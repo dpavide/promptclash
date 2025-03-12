@@ -12,6 +12,7 @@
   let gameId = 0;
   let promptIndex: number = 0;
   let currentPrompt: any = null;
+  let cleanup;
 
   let responses: Array<{
     id: number;
@@ -63,24 +64,25 @@
       return false;
     }
     currentPrompt = promptsList[promptIndex];
+    console.log("This is the current prompt", currentPrompt.id)
     return true;
   }
 
-  function setupRealtimeSubscriptions() {
+  /* function setupRealtimeSubscriptions() {
     // Votes table => update local vote counts => check if all voted => goto
     votesSubscription = supabase
       .channel("prompt-votes")
       .on(
         "postgres_changes",
         {
-          event: "*",
-          schema: "public",
-          table: "votes",
-          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt?.id}`
-        },
+          event: '*',
+          schema: 'public',
+          table: 'votes',
+          filter: `game_id=eq.${gameId}`
+        }, 
         async () => {
           // re-fetch local vote counts
-          await refreshVoteCounts();
+          console.log("print ihdajshdah")
           // check if all voted => goto winner
           const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt?.id, playersWhoCanVote);
           if (allVoted) {
@@ -91,16 +93,16 @@
       .on(
         "postgres_changes",
         {
-          event: "*",
-          schema: "public",
-          table: "responses",
-          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt?.id}`
+          event: '*',
+          schema: 'public',
+          table: 'responses',
+          filter: `game_id=eq.${gameId} and response_id=eq.${currentPrompt.id}`
         },
         async () => {
           // re-fetch local vote counts
           await refreshVoteCounts();
           // check if all voted => goto winner
-          const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt?.id, playersWhoCanVote);
+          const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt.id, playersWhoCanVote);
           if (allVoted) {
             goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
           }
@@ -113,22 +115,51 @@
           schema: "public",
           table: "profiles",
           filter: `id=eq.${gameId}`
-        },
-        (payload) => {
-          const newIndex = payload.new.current_prompt_index;
-          if (newIndex !== promptIndex) {
-            // universal redirect
-            goto(`/winner?gameId=${gameId}&promptIndex=${newIndex}`);
+        }, 
+        async () => {
+          console.log("Checking the voting status asad")
+          const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt.id, playersWhoCanVote);
+          if (allVoted) {
+            goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
           }
         }
       )
       .subscribe();
+
       return () => {
         if (votesSubscription) {
           supabase.removeChannel(votesSubscription);
         }
       }
-  }
+  } */
+
+  function setupRealtimeSubscriptions() {
+        // Subscribe to votes table changes for this game
+        votesSubscription = supabase
+            .channel('game-votes')
+            .on('postgres_changes', {
+                event: '*', // Listen for all changes
+                schema: 'public',
+                table: 'profiles',
+                filter: `game_id=eq.${gameId}`
+            }, async () => {
+                // Refresh responses when any vote changes
+                const allVoted = await checkAllVotedForPrompt(gameId, currentPrompt.id, playersWhoCanVote);
+                if (allVoted) {
+                  goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
+                }
+            })
+            .subscribe();
+
+        // Return cleanup function
+        return () => {
+            if (votesSubscription) {
+                supabase.removeChannel(votesSubscription);
+            }
+        };
+    }
+
+
 
   // Combined 2 functions: Fetch the responses for the current prompt
   async function fetchCurrentResponses() {
@@ -180,141 +211,6 @@
     }));
   }
 
-  // Fetch the current prompt (based on promptIndex) and its 2 responses.
-  async function fetchPromptAndResponses() {
-    // 1) fetch all prompts for this game
-    const { data: promptList, error: pErr } = await supabase
-      .from("prompts")
-      .select("id, text, player_id")
-      .eq("game_id", gameId)
-      .order("id", { ascending: true });
-
-    if (pErr || !promptList || promptList.length === 0) {
-      errorMessage = "No prompts found for this game.";
-      return false;
-    }
-    // if promptIndex >= promptList.length => final scoreboard
-    if (promptIndex >= promptList.length) {
-      goto(`/winner?gameId=${gameId}&final=true`);
-      return false;
-    }
-
-    currentPrompt = promptList[promptIndex];
-
-    // 2) fetch the 2 responses for currentPrompt
-    const { data: respData, error: respErr } = await supabase
-      .from("responses")
-      .select("id, text, player_id")
-      .eq("game_id", gameId)
-      .eq("prompt_id", currentPrompt.id);
-    if (respErr || !respData || respData.length < 2) {
-      errorMessage = "Not enough responses found for this prompt.";
-      return false;
-    }
-    // identify the responders
-    responderIDs = new Set(respData.map(r => r.player_id));
-
-    // Initialize local responses array
-    responses = respData.map(r => ({
-      id: r.id,
-      text: r.text?.trim() || "{no response given}",
-      player_id: r.player_id,
-      vote_count: 0
-    }));
-
-    // do an initial refresh of the vote counts
-    await refreshVoteCounts();
-    return true;
-  }
-
-  // Fetch responses, prompts, and vote counts, then group them.
-  async function fetchResponsesWithPrompt() {
-    // Fetch responses for this game
-    const { data: responses, error: responsesError } = await supabase
-      .from("responses")
-      .select("id, text, prompt_id, player_id")
-      .eq("game_id", gameId);
-    if (responsesError || !responses) {
-      errorMessage = "Failed to fetch responses.";
-      return;
-    }
-
-    // Fetch prompts to get the prompt text
-    const { data: prompts, error: promptsError } = await supabase
-      .from("prompts")
-      .select("id, text")
-      .eq("game_id", gameId);
-    if (promptsError || !prompts) {
-      errorMessage = "Failed to fetch prompts.";
-      return;
-    }
-    const promptMap: Record<number, string> = {};
-    for (const p of prompts) {
-      promptMap[p.id] = p.text;
-    }
-
-    // Fetch votes for the game
-    const { data: votes, error: votesError } = await supabase
-      .from("votes")
-      .select("response_id")
-      .eq("game_id", gameId);
-    if (votesError || !votes) {
-      errorMessage = "Failed to fetch votes.";
-      return;
-    }
-    const voteCounts: Record<number, number> = {};
-    for (const v of votes) {
-      voteCounts[v.response_id] = (voteCounts[v.response_id] || 0) + 1;
-    }
-
-    // Group responses by prompt_id and attach vote counts.
-    let tempGroups: Record<number, { prompt_text: string; responses: any[] }> =
-      {};
-    responses.forEach((r: any) => {
-      const pid = r.prompt_id;
-      // Use r.text (if empty, fallback to a default string)
-      const text =
-        r.text && r.text.trim().length > 0 ? r.text : "{no response given}";
-      if (!tempGroups[pid]) {
-        tempGroups[pid] = {
-          prompt_text: promptMap[pid] || "Unknown prompt",
-          responses: [],
-        };
-      }
-      tempGroups[pid].responses.push({
-        id: r.id,
-        text,
-        player_id: r.player_id,
-        vote_count: voteCounts[r.id] || 0,
-      });
-    });
-    groups = tempGroups;
-  }
-
-  async function fetchResponses() {
-    if (!gameId) return;
-    const data = await fetchResponsesForGame(gameId);
-    responses =
-      data.map((r) => ({
-        ...r,
-        response: r.text?.trim().length > 0 ? r.text : "{no response given}",
-      })) || [];
-  }
-
-  async function checkIfUserVoted() {
-    if (!userId || !gameId) return;
-    const { data, error } = await supabase
-      .from("votes")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("game_id", gameId)
-      .eq("prompt_id", currentPrompt.id)
-      .maybeSingle();
-    if (!error && data) {
-      hasVoted = true;
-    }
-  }
-
   async function handleVote(responseId: number, responsePlayerId: string) {
     if (responderIDs.has(userId)) {
       alert("You can't vote for your own response!");
@@ -345,35 +241,6 @@
     }
   }
 
-  // Custom subscription function for votes
-  function subscribeToVotesUpdates() {
-    return supabase
-      .channel("game-votes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "votes",
-          // Only watch votes for this game & this prompt
-          filter: `game_id=eq.${gameId} and prompt_id=eq.${currentPrompt?.id}`,
-        },
-        async () => {
-          // Re-check if everyone has voted
-          const allVoted = await checkAllVotedForPrompt(
-            gameId,
-            currentPrompt?.id,
-            playersWhoCanVote
-          );
-          if (allVoted) {
-            // Proceed to winner page for this prompt
-            goto(`/winner?gameId=${gameId}&promptIndex=${promptIndex}`);
-          }
-        }
-      )
-      .subscribe();
-  }
-
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdParameter = urlParams.get("gameId");
@@ -383,33 +250,33 @@
       goto("/waitingroom");
       return;
     }
-    gameId = Number(gameIdParameter);
-    promptIndex = PromptIndexParameter ? Number(PromptIndexParameter) : 0;
+    const {data: sessionData} = await supabase.auth.getSession();
+    userId = sessionData?.session?.user?.id;
+    const { data: latestGam, error: gameError } = await supabase
+    .from("game")
+      .select("id")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
 
-    // Get user info
-    const { data: sessionData } = await supabase.auth.getSession();
-    userId = sessionData?.session?.user?.id || "";
+     if (!gameError) {
+        console.log("no game error");
+        gameId = Number(gameIdParameter);
+        promptIndex = PromptIndexParameter ? Number(PromptIndexParameter) : 0;
+        await fetchPlayerCount();
+        const ok = await fetchCurrentPrompt();
+        if (!ok || !currentPrompt) return;
+        await fetchCurrentResponses();
+        const cleanup = setupRealtimeSubscriptions();
+        
+        onDestroy(cleanup);
+  } else {
+    console.error("Error fetching current game:", gameError);
+  }
+});
 
-    await fetchPlayerCount();
-
-    const ok = await fetchCurrentPrompt();
-    if (!ok || !currentPrompt) return;
-
-    await fetchCurrentResponses();
-    
-    const cleanup = setupRealtimeSubscriptions();
-    onDestroy(cleanup);
-  });
-
-  onDestroy(() => {
-    if (votesSubscription && typeof votesSubscription.unsubscribe === "function") {
-      votesSubscription.unsubscribe();
-    }
-    if (gameSubscription && typeof gameSubscription.unsubscribe === "function") {
-      gameSubscription.unsubscribe();
-    }
-  });
 </script>
+
 
 <h1>Voting on Prompt #{promptIndex + 1}</h1>
 
