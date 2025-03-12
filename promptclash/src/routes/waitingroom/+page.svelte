@@ -4,7 +4,7 @@
   import { onMount } from "svelte";
 
   let currentGame;
-  let players: { username: string }[] = [];
+  let players: { id: string; username: string }[] = [];
   let gameId;
   export let playerimages: string[] = [
     "gameCharacters/playerRed.png",
@@ -17,9 +17,7 @@
     "gameCharacters/playerPink.png",
   ];
 
-
   onMount(async () => {
-    // Get gameId from the URL query parameters
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdParam = urlParams.get("gameId");
     if (!gameIdParam) {
@@ -28,7 +26,6 @@
     }
     gameId = Number(gameIdParam);
 
-    // Fetch the game record by its ID
     const { data: gameData, error: gameError } = await supabase
       .from("game")
       .select("*")
@@ -40,7 +37,6 @@
     }
     currentGame = gameData;
 
-    // Set up a subscription to update the player list
     const channel = supabase
       .channel("game")
       .on(
@@ -54,21 +50,21 @@
         async () => {
           const { data } = await supabase
             .from("profiles")
-            .select("username")
+            .select("id, username")
             .eq("game_id", currentGame.id);
-          players = data || [];
+          players = data ? data.sort((a, b) => a.id.localeCompare(b.id)) : [];
         }
       )
       .subscribe();
 
-    // Initial fetch of players
     const { data: initialPlayers } = await supabase
       .from("profiles")
-      .select("username")
+      .select("id, username")
       .eq("game_id", currentGame.id);
-    players = initialPlayers || [];
+    players = initialPlayers
+      ? initialPlayers.sort((a, b) => a.id.localeCompare(b.id))
+      : [];
 
-    // Listen for game updates (e.g. when a prompt is assigned)
     const gameChannel = supabase
       .channel("game-start")
       .on(
@@ -81,7 +77,6 @@
         },
         (payload) => {
           if (payload.new.prompt_id) {
-            // Pass gameId in the URL when redirecting
             goto(`/game?gameId=${currentGame.id}`);
           }
         }
@@ -100,7 +95,6 @@
       return;
     }
     try {
-      // Count available prompts
       const { count: promptCount, error: countError } = await supabase
         .from("prompts")
         .select("id", { count: "exact", head: true });
@@ -109,7 +103,6 @@
         throw new Error("No prompts available");
       }
 
-      // Pick a random prompt
       const randomOffset = Math.floor(Math.random() * promptCount);
       const { data: promptData, error: promptError } = await supabase
         .from("prompts")
@@ -120,7 +113,6 @@
         throw new Error("No prompts available");
       }
 
-      // Update the game with the selected prompt
       const { error: updateError } = await supabase
         .from("game")
         .update({ prompt_id: promptData.id })
@@ -139,20 +131,14 @@
   <p class="game-id">Game ID: {currentGame.id}</p>
 {/if}
 
-<!-- If no players have joined yet, show a waiting message -->
 {#if players.length === 0}
   <p class="waiting-text">Waiting for players to join...</p>
 {:else}
-  <!-- Display each player in its own box -->
   <div class="players">
     {#each players as player, i}
       <div class="player-box color-{i % 8}">
         <div class="player-icon">
-          <!-- Show the corresponding image for the player’s index -->
-          <img
-            src={playerimages[i % playerimages.length]}
-            alt="Player icon"
-          />
+          <img src={playerimages[i % playerimages.length]} alt="Player icon" />
         </div>
         <div class="player-label">
           {player.username}
@@ -162,17 +148,15 @@
   </div>
 {/if}
 
-<!-- Start/Play button below all players -->
 <button class="start-button" on:click={startGame} disabled={players.length < 3}>
   Start Game ({players.length}/3+)
 </button>
 
 <style>
-  /* Basic page styling */
   :global(body) {
     margin: 0;
     padding: 0;
-    background-color: #4CB3FF; /* Bright blue background */
+    background-color: #4cb3ff;
     font-family: Arial, sans-serif;
     text-align: center;
     color: #000;
@@ -197,7 +181,6 @@
     margin: 2rem 0;
   }
 
-  /* Container for all player boxes */
   .players {
     display: flex;
     flex-direction: column;
@@ -206,7 +189,6 @@
     margin: 2rem auto;
   }
 
-  /* Individual player box */
   .player-box {
     display: flex;
     align-items: center;
@@ -218,7 +200,6 @@
     color: #fff;
   }
 
-  /* Player icon container */
   .player-icon {
     width: 45px;
     height: 45px;
@@ -228,14 +209,13 @@
     align-items: center;
     justify-content: center;
     margin-right: 1rem;
-    overflow: hidden; /* so the image is clipped to a circle */
+    overflow: hidden;
   }
 
-  /* Make sure the image fits nicely in the icon circle */
   .player-icon img {
     width: 100%;
     height: 100%;
-    object-fit: contain; /* or "cover" if you prefer filling the circle */
+    object-fit: contain;
   }
 
   .player-label {
@@ -243,17 +223,32 @@
     font-size: 1.1rem;
   }
 
-  /* Example color classes for the boxes */
-  .color-0 { background-color: #FF4B4B; }   /* Red */
-  .color-1 { background-color: #FFA500; }   /* Orange */
-  .color-2 { background-color: #FFEB3B; color: #000; }  /* Yellow (with black text) */
-  .color-3 { background-color: #4CAF50; }   /* Green */
-  .color-4 { background-color: #009688; }   /* Teal/dark green */
-  .color-5 { background-color: #2196F3; }   /* Blue */
-  .color-6 { background-color: #9C27B0; }   /* Purple */
-  .color-7 { background-color: #E91E63; }   /* Pink */
+  .color-0 {
+    background-color: #ff4b4b;
+  }
+  .color-1 {
+    background-color: #ffa500;
+  }
+  .color-2 {
+    background-color: #ffeb3b;
+    color: #000;
+  }
+  .color-3 {
+    background-color: #4caf50;
+  }
+  .color-4 {
+    background-color: #009688;
+  }
+  .color-5 {
+    background-color: #2196f3;
+  }
+  .color-6 {
+    background-color: #9c27b0;
+  }
+  .color-7 {
+    background-color: #e91e63;
+  }
 
-  /* The PLAY! button below the players */
   .start-button {
     padding: 1rem 2rem;
     font-size: 1.2rem;
@@ -273,4 +268,3 @@
     cursor: not-allowed;
   }
 </style>
-

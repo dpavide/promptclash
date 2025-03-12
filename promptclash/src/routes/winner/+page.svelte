@@ -2,24 +2,33 @@
   import { onMount, onDestroy } from "svelte";
   import { goto } from "$app/navigation";
   import { supabase } from "$lib/supabaseClient";
-  import {
-    fetchAllPlayersScores,
-    calculatePromptScores,
-  } from "$lib/api";
+  import { fetchAllPlayersScores, calculatePromptScores } from "$lib/api";
 
   let gameId: number;
   let promptIndex: number = 0;
   let finalMode: boolean = false;
   let finalScores: any[] = [];
+  let players: any[] = [];
 
   let currentPrompt: any = null;
   let errorMessage = "";
   let subscription: any;
-  let result: any = null; 
+  let result: any = null;
 
   let promptAuthorName = "";
   let responderA: any = null;
   let responderB: any = null;
+
+  let playerHeadImages: string[] = [
+    "gameCharacters/playerRed.png",
+    "gameCharacters/playerOrange.png",
+    "gameCharacters/playerYellow.png",
+    "gameCharacters/playerLightGreen.png",
+    "gameCharacters/playerDarkGreen.png",
+    "gameCharacters/playerBlue.png",
+    "gameCharacters/playerPurple.png",
+    "gameCharacters/playerPink.png",
+  ];
 
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -34,7 +43,17 @@
     }
     gameId = Number(param);
     promptIndex = index ? Number(index) : 0;
-    finalMode = (finalParam === "true");
+    finalMode = finalParam === "true";
+
+    // Fetch and sort players
+    const { data: playersData, error: playersError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("game_id", gameId);
+
+    if (!playersError) {
+      players = playersData.sort((a, b) => a.id.localeCompare(b.id));
+    }
 
     subscription = supabase
       .channel("game-changes")
@@ -44,7 +63,7 @@
           event: "UPDATE",
           schema: "public",
           table: "game",
-          filter: `id=eq.${gameId}`
+          filter: `id=eq.${gameId}`,
         },
         (payload) => {
           const newIndex = payload.new.current_prompt_index;
@@ -60,7 +79,6 @@
       return;
     }
 
-    // Fetch all prompts for this game (sorted by id)
     const { data: prompts, error: promptErr } = await supabase
       .from("prompts")
       .select("id, text, player_id")
@@ -73,14 +91,12 @@
     }
 
     if (promptIndex >= prompts.length) {
-      // No more prompts; show final scoreboard
       goto(`/winner?gameId=${gameId}&final=true`);
       return;
     }
 
     currentPrompt = prompts[promptIndex];
 
-    // fetch the prompt's author
     if (currentPrompt?.player_id) {
       const { data: authorProfile } = await supabase
         .from("profiles")
@@ -90,7 +106,6 @@
       promptAuthorName = authorProfile?.username || "Unknown";
     }
 
-    // do the final scoring for this prompt
     const res = await calculatePromptScores(gameId, currentPrompt.id);
     if (res.error) {
       errorMessage = res.error;
@@ -98,9 +113,7 @@
     }
     result = res;
 
-    // if tie => we have respA & respB; otherwise, we have winner & loser
     if (result.tie) {
-      // fetch their names from profiles
       responderA = await fetchResponderInfo(result.respA);
       responderB = await fetchResponderInfo(result.respB);
     } else {
@@ -113,38 +126,15 @@
     if (subscription && typeof subscription.unsubscribe === "function") {
       subscription.unsubscribe();
     }
-    // ─── NEW: Clear decoration animation interval
     clearInterval(decorationInterval);
   });
 
-  function subscribeToGameChanges() {
-    subscription = supabase
-      .channel("game-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "game",
-          filter: `id=eq.${gameId}`
-        },
-        (payload) => {
-          const newIndex = payload.new.current_prompt_index;
-          if (newIndex !== promptIndex) {
-            // universal redirect
-            goto(`/voting?gameId=${gameId}&promptIndex=${newIndex}`);
-          }
-        }
-      )
-      .subscribe();
-  }
-
-  // fetch a single responder's username
   async function fetchResponderInfo(respObj) {
     if (!respObj?.player_id) {
       return {
         username: "Unknown",
         vote_count: respObj?.vote_count || 0,
+        playerIndex: -1,
       };
     }
     const { data: p } = await supabase
@@ -152,23 +142,21 @@
       .select("username")
       .eq("id", respObj.player_id)
       .single();
+
     return {
       username: p?.username || "Unknown",
       vote_count: respObj.vote_count || 0,
+      playerIndex: players.findIndex((p) => p.id === respObj.player_id),
     };
   }
 
   async function nextPrompt() {
     const newIndex = promptIndex + 1;
-    console.log(newIndex)
-
     if (newIndex !== promptIndex) {
-            // universal redirect
-            goto(`/voting?gameId=${gameId}&promptIndex=${newIndex}`);
-      }
+      goto(`/voting?gameId=${gameId}&promptIndex=${newIndex}`);
     }
+  }
 
-  // ─── NEW: Decoration animation variables and interval setup ─────────
   let decorationSet = 0;
   let decorationInterval;
   onMount(() => {
@@ -179,7 +167,6 @@
 </script>
 
 {#if finalMode}
-  <!-- Final Scoreboard remains as before -->
   <h1>Final Scoreboard</h1>
   {#if errorMessage}
     <p style="color: red;">{errorMessage}</p>
@@ -190,7 +177,6 @@
     {/each}
   </ol>
 {:else if currentPrompt}
-  <!-- New UI layout with a styled frame and two-column result display -->
   <div class="page-container">
     <div class="frame">
       <h1>Results for Prompt #{promptIndex + 1}</h1>
@@ -207,14 +193,20 @@
             <div class="tieColumn">
               <div class="tiePoints">+{responderA?.vote_count * 100}</div>
               <div class="tieImage">
-                <img src="gameCharacters/playerRed.png" alt="Player Image">
+                <img
+                  src={playerHeadImages[responderA?.playerIndex]}
+                  alt="Player Image"
+                />
               </div>
               <div class="tieName">{responderA?.username}</div>
             </div>
             <div class="tieColumn">
               <div class="tiePoints">+{responderB?.vote_count * 100}</div>
               <div class="tieImage">
-                <img src="gameCharacters/playerBlue.png" alt="Player Image">
+                <img
+                  src={playerHeadImages[responderB?.playerIndex]}
+                  alt="Player Image"
+                />
               </div>
               <div class="tieName">{responderB?.username}</div>
             </div>
@@ -222,18 +214,26 @@
           <p>No bonus points awarded in a tie.</p>
         {:else}
           <div class="winnerColumn">
-            <div class="winnerPoints"><br><br>+{result.bonusPoints}</div>
+            <div class="winnerPoints"><br /><br />+{result.bonusPoints}</div>
             <div class="winnerImage">
-              <img src="gameCharacters/playerRed.png" alt="Winner Image">
+              <img
+                src={playerHeadImages[responderA?.playerIndex]}
+                alt="Winner Image"
+              />
             </div>
-            <div class="winnerName">Winner:<br>{responderA?.username}</div>
+            <div class="winnerName">Winner:<br />{responderA?.username}</div>
           </div>
           <div class="loserColumn">
-            <div class="loserPoints"><br><br>+{responderB?.vote_count * 100}</div>
-            <div class="loserImage">
-              <img src="gameCharacters/playerBlue.png" alt="Loser Image">
+            <div class="loserPoints">
+              <br /><br />+{responderB?.vote_count * 100}
             </div>
-            <div class="loserName">2nd:<br>{responderB?.username}</div>
+            <div class="loserImage">
+              <img
+                src={playerHeadImages[responderB?.playerIndex]}
+                alt="Loser Image"
+              />
+            </div>
+            <div class="loserName">2nd:<br />{responderB?.username}</div>
           </div>
         {/if}
         <button on:click={nextPrompt}>Next Prompt</button>
@@ -246,17 +246,40 @@
   <p>Loading prompt info...</p>
 {/if}
 
-<!-- Decoration Images at the very bottom with animation -->
 <div class="decorations">
-  <img src={decorationSet === 0 ? "gameCharacters/PlayerOrangeIdle.png" : "gameCharacters/PlayerOrangeWrite.png"} alt="Decoration Orange">
-  <img src={decorationSet === 0 ? "gameCharacters/PlayerYellowIdle.png" : "gameCharacters/PlayerYellowWrite.png"} alt="Decoration Yellow">
-  <img src={decorationSet === 0 ? "gameCharacters/PlayerDarkGreenIdle.png" : "gameCharacters/PlayerDarkGreenWriting.png"} alt="Decoration Dark Green">
-  <img src={decorationSet === 0 ? "gameCharacters/PlayerLightGreenIdle.png" : "gameCharacters/PlayerLightGreenWrite.png"} alt="Decoration Light Green">
-  <img src={decorationSet === 0 ? "gameCharacters/PlayerPurpleIdle.png" : "gameCharacters/PlayerPurpleWrite.png"} alt="Decoration Purple">
+  <img
+    src={decorationSet === 0
+      ? "gameCharacters/PlayerOrangeIdle.png"
+      : "gameCharacters/PlayerOrangeWrite.png"}
+    alt="Decoration Orange"
+  />
+  <img
+    src={decorationSet === 0
+      ? "gameCharacters/PlayerYellowIdle.png"
+      : "gameCharacters/PlayerYellowWrite.png"}
+    alt="Decoration Yellow"
+  />
+  <img
+    src={decorationSet === 0
+      ? "gameCharacters/PlayerDarkGreenIdle.png"
+      : "gameCharacters/PlayerDarkGreenWrite.png"}
+    alt="Decoration Dark Green"
+  />
+  <img
+    src={decorationSet === 0
+      ? "gameCharacters/PlayerLightGreenIdle.png"
+      : "gameCharacters/PlayerLightGreenWrite.png"}
+    alt="Decoration Light Green"
+  />
+  <img
+    src={decorationSet === 0
+      ? "gameCharacters/PlayerPurpleIdle.png"
+      : "gameCharacters/PlayerPurpleWrite.png"}
+    alt="Decoration Purple"
+  />
 </div>
 
 <style>
-  /* Styles from the current winner page */
   h1,
   h2 {
     text-align: center;
@@ -270,7 +293,6 @@
     cursor: pointer;
   }
 
-  /* New styles from the older version for enhanced layout */
   .page-container {
     display: flex;
     flex-direction: column;
@@ -301,14 +323,18 @@
   .frame > * {
     transform: translateY(calc(-1 * var(--base-offset) * var(--frame-scale)));
   }
-  .winnerColumn, .loserColumn, .tieColumn {
+  .winnerColumn,
+  .loserColumn,
+  .tieColumn {
     display: flex;
     flex-direction: column;
     text-align: center;
     align-items: center;
     margin: 1rem;
   }
-  .winnerImage img, .loserImage img, .tieImage img {
+  .winnerImage img,
+  .loserImage img,
+  .tieImage img {
     width: 100%;
     max-width: 100px;
     height: auto;
