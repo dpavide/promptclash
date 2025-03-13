@@ -82,30 +82,38 @@
   let lineWidth: number = 5;
 
   async function checkProfanity(text: string): Promise<boolean> {
-      try {
-          console.log("Checking profanity for:", text);
-          const res = await fetch(`https://api.api-ninjas.com/v1/profanityfilter?text=${encodeURIComponent(text)}`, {
-              headers: {
-                  "X-Api-Key": "YegnxWw3X0xgvCkPMEaUCg==ugPzwG3b5VAktHVf"
-              }
-          });
+    try {
+      console.log("Checking profanity for:", text);
+      const res = await fetch(
+        `https://api.api-ninjas.com/v1/profanityfilter?text=${encodeURIComponent(text)}`,
+        {
+          headers: {
+            "X-Api-Key": "YegnxWw3X0xgvCkPMEaUCg==ugPzwG3b5VAktHVf",
+          },
+        }
+      );
 
-          if (!res.ok) {
-              throw new Error(`API Error: ${res.status} ${await res.text()}`);
-          }
-
-          const result = await res.json();
-          console.log("Profanity API result:", result);
-
-          // Check if bad words were detected
-          return result.censored;
-      } catch (error) {
-          console.error("Error checking profanity:", error);
-          return false; // If error occurs, assume no profanity to avoid blocking submissions unfairly
+      if (!res.ok) {
+        throw new Error(`API Error: ${res.status} ${await res.text()}`);
       }
+
+      const result = await res.json();
+      console.log("Profanity API result:", result);
+
+      // Check if bad words were detected
+      return result.censored;
+    } catch (error) {
+      console.error("Error checking profanity:", error);
+      return false; // If error occurs, assume no profanity to avoid blocking submissions unfairly
+    }
   }
 
-  let players: { id: string; username?: string; submitted_prompt?: boolean; submitted_response?: boolean }[] = [];
+  let players: {
+    id: string;
+    username?: string;
+    submitted_prompt?: boolean;
+    submitted_response?: boolean;
+  }[] = [];
 
   async function fetchGame() {
     const { data: gameData, error: gameError } = await supabase
@@ -176,7 +184,7 @@
         },
         async () => {
           if (stage === "prompt" || stage === "waitingPrompt") {
-          await checkIfAllSubmittedPrompts();
+            await checkIfAllSubmittedPrompts();
           }
         }
       )
@@ -309,7 +317,12 @@
     const profanityCheckedAnswer = await checkProfanity(responseInput);
     try {
       // 1) Submit the response
-      await submitResponse(gameId, userId, targetPrompt.id, profanityCheckedAnswer);
+      await submitResponse(
+        gameId,
+        userId,
+        targetPrompt.id,
+        profanityCheckedAnswer
+      );
       // 2) Clear the input
       responseInput = "";
       errorMessage = "";
@@ -324,7 +337,10 @@
         // user answered second prompt => done
         stage = "waitingResponse";
         successMessage = "You answered both prompts. Waiting for others...";
-        await supabase.from("profiles").update({ submitted_response: true }).eq("id", userId);
+        await supabase
+          .from("profiles")
+          .update({ submitted_response: true })
+          .eq("id", userId);
       }
     } catch (err) {
       console.error("Error submitting response:", err);
@@ -421,7 +437,7 @@
           event: "*",
           schema: "public",
           table: "profiles",
-          filter: `game_id=eq.${gameId}`
+          filter: `game_id=eq.${gameId}`,
         },
         async () => {
           await fetchPlayers();
@@ -433,9 +449,17 @@
 
   function getPlayerImage(player, index) {
     if (stage === "prompt" || stage === "waitingPrompt") {
-      return player.submitted_prompt ? playerIdleImages[index] : playerWriteImages[index];
-    } else if (stage === "response1" || stage === "response2" || stage === "waitingResponse") {
-      return player.submitted_response ? playerIdleImages[index] : playerWriteImages[index];
+      return player.submitted_prompt
+        ? playerIdleImages[index]
+        : playerWriteImages[index];
+    } else if (
+      stage === "response1" ||
+      stage === "response2" ||
+      stage === "waitingResponse"
+    ) {
+      return player.submitted_response
+        ? playerIdleImages[index]
+        : playerWriteImages[index];
     }
     return playerWriteImages[index];
   }
@@ -501,10 +525,9 @@
     if (responseSubscription) supabase.removeChannel(responseSubscription);
     if (profilesSubscription && typeof profilesSubscription === "function") {
       profilesSubscription();
-    } 
+    }
   });
 
-  // subscribe => each time a user updates 'responses', we check if all are done
   // subscribe => each time a user updates 'responses', we check if all are done
   function subscribeToResponseSubmissions() {
     responseSubscription = supabase
@@ -591,8 +614,12 @@
           placeholder="Type something..."
         />
         <div class="button-group" style="margin-top: 1rem;">
-          <button on:click={() => handleSubmitPrompt(false)}>Submit Prompt</button>
-          <button on:click={() => handleSubmitPrompt(true)}>Use Default Prompt</button>
+          <button on:click={() => handleSubmitPrompt(false)}
+            >Submit Prompt</button
+          >
+          <button on:click={() => handleSubmitPrompt(true)}
+            >Use Default Prompt</button
+          >
         </div>
       </div>
     {:else if stage === "waitingPrompt"}
@@ -605,7 +632,42 @@
         <div class="prompt-container">
           <p><strong>Prompt #1</strong>:</p>
           <p><em>{assignedPrompts[0].text}</em></p>
-          <textarea bind:value={responseInput} placeholder="Type your answer..."></textarea>
+          <!-- New container for written and drawn responses -->
+          <div class="response-area">
+            <div class="text-area-wrapper">
+              <textarea
+                bind:value={responseInput}
+                placeholder="Type your response for prompt #1..."
+              ></textarea>
+            </div>
+            <!-- Drawing area commented for now-->
+            <!-- 
+            <div class="drawing-area">
+              <p>Or draw your response:</p>
+              <canvas
+                bind:this={canvas}
+                width="420"
+                height="200"
+                on:mousedown={startDrawing}
+                on:mousemove={draw}
+                on:mouseup={stopDrawing}
+                on:mouseleave={stopDrawing}
+              ></canvas>
+              <div class="controls">
+                <label>
+                  Color: <input type="color" bind:value={color} />
+                </label>
+                <label>
+                  Size:
+                  <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
+                  {lineWidth}px
+                </label>
+                <button on:click={clearCanvas}>Clear</button>
+                <button on:click={submitDrawing}>Submit Drawing</button>
+              </div>
+            </div>
+          -->
+          </div>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>
       {:else}
@@ -616,10 +678,41 @@
         <div class="prompt-container">
           <p><strong>Prompt #2</strong>:</p>
           <p><em>{assignedPrompts[1].text}</em></p>
-          <textarea
-            bind:value={responseInput}
-            placeholder="Type your response..."
-          ></textarea>
+          <!-- New container for written and drawn responses -->
+          <div class="response-area">
+            <div class="text-area-wrapper">
+              <textarea
+                bind:value={responseInput}
+                placeholder="Type your response..."
+              ></textarea>
+            </div>
+            <!-- Drawing area commented for now-->
+            <!--<div class="drawing-area">
+              <p>Or draw your response:</p>
+              <canvas
+                bind:this={canvas}
+                width="420"
+                height="200"
+                on:mousedown={startDrawing}
+                on:mousemove={draw}
+                on:mouseup={stopDrawing}
+                on:mouseleave={stopDrawing}
+              ></canvas>
+              <div class="controls">
+                <label>
+                  Color: <input type="color" bind:value={color} />
+                </label>
+                <label>
+                  Size:
+                  <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
+                  {lineWidth}px
+                </label>
+                <button on:click={clearCanvas}>Clear</button>
+                <button on:click={submitDrawing}>Submit Drawing</button>
+              </div>
+            </div>
+            -->
+          </div>
           <button on:click={handleSubmitResponse}>Submit Response</button>
         </div>
       {:else}
@@ -639,7 +732,7 @@
        Join order is determined by sorting the players by id. -->
   <div class="players">
     {#each players.sort((a, b) => a.id.localeCompare(b.id)) as player, i}
-      <img src= {getPlayerImage(player, i)} alt="Player" class="player"/>
+      <img src={getPlayerImage(player, i)} alt="Player" class="player" />
     {/each}
   </div>
 </div>
@@ -664,7 +757,7 @@
     background-position: center;
     border-radius: 12px;
     margin-top: 10px;
-    animation: bgAnimation 1s infinite;
+    animation: bgAnimation 1s infinite ease-in-out;
   }
   @keyframes bgAnimation {
     0% {
@@ -697,7 +790,49 @@
     align-items: center;
     gap: 15px;
   }
+  /* New container to display textarea and drawing area side-by-side */
+  .response-area {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+  }
+  .text-area-wrapper {
+    flex: 1;
+  }
+  .text-area-wrapper textarea {
+    width: 100%;
+    height: 150px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  /* Resizable drawing area */
+  .drawing-area {
+    flex: 1;
+    resize: both;
+    overflow: auto;
+    min-width: 300px;
+    min-height: 200px;
+    border: 2px solid black;
+    padding: 5px;
+    box-sizing: border-box;
+  }
+  .drawing-area canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .controls {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
   textarea {
+    /* Fallback textarea styles for other areas if needed */
     width: 95%;
     height: 50px;
     margin: 10px 0;
@@ -705,6 +840,7 @@
     border: 1px solid #ddd;
     border-radius: 8px;
     resize: none;
+    box-sizing: border-box;
   }
   button {
     padding: 10px 15px;
@@ -735,43 +871,10 @@
     max-height: 150px;
     margin: 0;
   }
-  canvas {
-    border: 2px solid black;
-    cursor: crosshair;
-  }
-  .controls {
-    margin-top: 10px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
   .error {
     color: red;
   }
   .success {
     color: green;
   }
-  /* 
-  <div class="drawing-section">
-    <p>Or draw your response:</p>
-    <canvas
-      bind:this={canvas}
-      width="420"
-      height="200"
-      on:mousedown={startDrawing}
-      on:mousemove={draw}
-      on:mouseup={stopDrawing}
-      on:mouseleave={stopDrawing}
-    ></canvas>
-    <div class="controls">
-      <label>Color: <input type="color" bind:value={color} /></label>
-      <label>Size:
-        <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
-        {lineWidth}px
-      </label>
-      <button on:click={clearCanvas}>Clear</button>
-      <button on:click={submitDrawing}>Submit Drawing</button>
-    </div>
-  </div>
-  */
 </style>
