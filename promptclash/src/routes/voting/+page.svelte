@@ -197,6 +197,7 @@
     if (!ok || !currentPrompt) return;
 
     await fetchCurrentResponses();
+
     const cleanup = setupRealtimeSubscriptions();
 
     onDestroy(() => {

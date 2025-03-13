@@ -123,8 +123,8 @@
   });
 
   onDestroy(() => {
-    if (subscription && typeof subscription.unsubscribe === "function") {
-      subscription.unsubscribe();
+    if (subscription) {
+      supabase.removeChannel(subscription);
     }
     clearInterval(decorationInterval);
   });

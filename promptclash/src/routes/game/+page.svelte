@@ -151,16 +151,16 @@
         .eq("game_id", gameId);
       if (error) {
         console.error("Error fetching initial players:", error);
-        return;
+        return null;
       }
       playerCount = players.length;
       console.log(`Initial players in game ${gameId}:`, playerCount);
 
-      // Subscribe to player count changes without automatic redirect
-      unsubscribe = monitorPlayerCount(
+      // Return the cleanup function directly
+      return monitorPlayerCount(
         gameId,
         () => {
-          // Removed automatic redirect to prevent interference with voting screen navigation
+          /* onReady callback */
         },
         (newCount: number) => {
           playerCount = newCount;
@@ -168,11 +168,12 @@
       );
     } catch (error) {
       console.error("Error setting up player count monitoring:", error);
+      return null;
     }
   }
 
-  function subscribeToPromptSubmissions() {
-    promptSubscription = supabase
+  function subscribeToPromptSubscriptions() {
+    const channel = supabase
       .channel("prompt-submissions")
       .on(
         "postgres_changes",
@@ -189,6 +190,8 @@
         }
       )
       .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }
 
   // check if all players have submitted_prompt = true
@@ -484,16 +487,16 @@
     currentGame = await fetchGame();
     await fetchPlayers();
 
-    setupPlayerCountMonitoring();
+    // Setup all subscriptions and capture cleanups immediately
+    const countCleanup = await setupPlayerCountMonitoring();
+    const promptCleanup = subscribeToPromptSubscriptions();
+    const responseCleanup = subscribeToResponseSubmissions();
+    const playersCleanup = subscribeToPlayerUpdates();
 
-    subscribeToPromptSubmissions();
     await checkIfAllSubmittedPrompts();
-
-    subscribeToResponseSubmissions();
     await checkIfAllSubmittedResponses();
 
-    profilesSubscription = subscribeToPlayerUpdates();
-
+    // Canvas initialization remains the same
     await tick();
     let tries = 10;
     while (!canvas && tries > 0) {
@@ -506,31 +509,28 @@
       if (ctx) {
         ctx.fillStyle = "white";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        console.log("Canvas initialized successfully:", ctx);
       }
-    } else {
-      console.error("Canvas still not available!");
     }
+
+    // Register all cleanups (CRITICAL FIX HERE)
+    onDestroy(() => {
+      if (countCleanup) countCleanup();
+      promptCleanup();
+      responseCleanup();
+      playersCleanup();
+    });
   });
 
   onDestroy(() => {
-    if (unsubscribeCount) {
-      if (typeof unsubscribeCount.unsubscribe === "function") {
-        unsubscribe.unsubscribe();
-      } else if (typeof unsubscribeCount === "function") {
-        unsubscribeCount();
-      }
-    }
-    if (promptSubscription) supabase.removeChannel(promptSubscription);
-    if (responseSubscription) supabase.removeChannel(responseSubscription);
-    if (profilesSubscription && typeof profilesSubscription === "function") {
-      profilesSubscription();
+    // Cleanup any remaining elements
+    if (unsubscribeCount && typeof unsubscribeCount === "function") {
+      unsubscribeCount();
     }
   });
 
   // subscribe => each time a user updates 'responses', we check if all are done
   function subscribeToResponseSubmissions() {
-    responseSubscription = supabase
+    const channel = supabase
       .channel("response-submissions")
       .on(
         "postgres_changes",
@@ -545,6 +545,8 @@
         }
       )
       .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }
 
   // check if all players have submitted_response = true
