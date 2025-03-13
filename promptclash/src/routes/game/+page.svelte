@@ -749,6 +749,7 @@
     transform: translate(-50%, -50%);
     width: 100%; /* Increased width for better content fit */
     max-width: 400px; /* Adjusted for smaller container */
+    z-index: 2;
   }
 
   .prompt-container {
@@ -838,6 +839,7 @@
     bottom: 0;
     left: 0;
     width: 100vw;
+    z-index: 1;
   }
 
   .player {
