@@ -205,31 +205,84 @@
   });
 </script>
 
-<h1>Voting on Prompt #{promptIndex + 1}</h1>
+<div class="page-container">
+  <div class="frame">
+    <h1>Voting on Prompt #{promptIndex + 1}</h1>
 
-{#if currentPrompt}
-  <p><strong>Prompt:</strong> {currentPrompt.text}</p>
+    {#if currentPrompt}
+      <p><strong>Prompt:</strong> {currentPrompt.text}</p>
 
-  {#each responses as r (r.id)}
-    <div style="margin-bottom: 1rem;">
-      <p>{r.text}</p>
-      <p>Votes: {r.vote_count}</p>
+      {#each responses as r (r.id)}
+        <div style="margin-bottom: 1rem;">
+          <p>{r.text}</p>
+          <p>Votes: {r.vote_count}</p>
 
-      {#if responderIDs.has(userId)}
-        <p style="color: gray;">(You are a responder; no voting)</p>
-      {:else if r.player_id === userId}
-        <p style="color: gray;">(Your own response)</p>
-      {:else if hasVoted}
-        <p style="color: gray;">(You already voted!)</p>
-      {:else}
-        <button on:click={() => handleVote(r.id, r.player_id)}>Vote</button>
-      {/if}
-    </div>
-  {/each}
-{:else}
-  <p>Loading prompt...</p>
-{/if}
+          {#if responderIDs.has(userId)}
+            <p style="color: gray;">(You are a responder; no voting)</p>
+          {:else if r.player_id === userId}
+            <p style="color: gray;">(Your own response)</p>
+          {:else if hasVoted}
+            <p style="color: gray;">(You already voted!)</p>
+          {:else}
+            <button on:click={() => handleVote(r.id, r.player_id)}>Vote</button>
+          {/if}
+        </div>
+      {/each}
+    {:else}
+      <p>Loading prompt...</p>
+    {/if}
 
-{#if errorMessage}
-  <p style="color: red;">{errorMessage}</p>
-{/if}
+    {#if errorMessage}
+      <p style="color: red;">{errorMessage}</p>
+    {/if}
+  </div>
+</div>
+
+<style>
+  .page-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+  }
+
+  .frame {
+    --frame-scale: 1.2;
+    --base-offset: 50px;
+    display: flex;
+    flex-direction: row;
+    width: 95vw;
+    max-width: 1200px;
+    aspect-ratio: 2 / 1;
+    position: relative;
+    background-image: url("backgrounds/bg1.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    animation: bgAnimation 1.5s infinite;
+    justify-content: space-around;
+    align-items: center;
+    transform: scale(var(--frame-scale));
+    margin-bottom: 10px;
+    padding: 1rem;
+  }
+  .frame > * {
+    transform: translateY(calc(-1 * var(--base-offset) * var(--frame-scale)));
+  }
+
+  @keyframes bgAnimation {
+    0% {
+      background-image: url("backgrounds/bg1.png");
+    }
+    33% {
+      background-image: url("backgrounds/bg2.png");
+    }
+    66% {
+      background-image: url("backgrounds/bg3.png");
+    }
+    100% {
+      background-image: url("backgrounds/bg1.png");
+    }
+  }
+</style>
