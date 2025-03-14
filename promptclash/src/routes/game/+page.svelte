@@ -53,6 +53,9 @@
   let unsubscribe: any;
   let subscription: any;
 
+  let timeLeft = 60;
+  let timerId: any = null;
+
   let playerWriteImages: string[] = [
     "gameCharacters/PlayerRedWrite.png",
     "gameCharacters/PlayerOrangeWrite.png",
@@ -106,6 +109,57 @@
       console.error("Error checking profanity:", error);
       return false; // If error occurs, assume no profanity to avoid blocking submissions unfairly
     }
+  }
+
+  // Function to start the timer for a given stage.
+  function startTimer() {
+    clearInterval(timerId); // Clear any existing timer
+    timeLeft = 60;          //  Reset timer to 60 seconds
+    timerId = setInterval(() => {
+      timeLeft--;
+      //  When time is running low, the UI will flash red (see getTimerStyle below)
+      if (timeLeft <= 0) {
+        clearInterval(timerId);
+        forceSubmission(); // Force-submit if time runs out
+      }
+    }, 1000);
+  }
+
+  //Function to clear the timer manually
+  function stopTimer() {
+    clearInterval(timerId);
+  }
+
+  //Function to determine timer style based on timeLeft
+  function getTimerStyle() {
+    if (timeLeft <= 10) {
+      return "color: red; animation: flash 1s infinite;";
+    } else if (timeLeft <= 15) {
+      return "color: orange;";
+    } else if (timeLeft <= 30) {
+      return "color: yellow;";
+    } else {
+      return "color: black;";
+    }
+  }
+
+  // Force submission if timer reaches 0
+  async function forceSubmission() {
+    // Only force submission if still in an input stage
+    if (stage === "prompt") {
+      if (!promptInput.trim()) {
+        await handleSubmitPrompt(true);
+      } else {
+        await handleSubmitPrompt(false);
+      }
+    } else if (stage === "response1" || stage === "response2") {
+      // For responses, submit even if empty (default to "{no response given}")
+      if (!responseInput.trim()) {
+        responseInput = "{no response given}";
+      }
+      await handleSubmitResponse();
+    }
+    // No auto-action for waiting stages.
   }
 
   let players: {
@@ -195,13 +249,14 @@
       // all have prompts => assign 2 prompts for each user
       await assignPromptsForCurrentUser();
       stage = "response1";
-      successMessage =
-        "All players have submitted prompts! Please answer your first assigned prompt.";
+      successMessage = "All players have submitted prompts! Please answer your first assigned prompt.";
+        startTimer();
     }
   }
 
   // Submit the user's prompt or default
   async function handleSubmitPrompt(useDefault: boolean) {
+    stopTimer(); 
     errorMessage = "";
     if (!userId) {
       errorMessage = "No user is signed in.";
@@ -270,6 +325,7 @@
   }
 
   async function handleSubmitResponse() {
+    stopTimer(); 
     if (!assignedPrompts || assignedPrompts.length === 0) {
       errorMessage = "No assigned prompts found.";
       return;
@@ -302,8 +358,8 @@
       if (responseIndex === 0 && assignedPrompts.length > 1) {
         responseIndex = 1;
         stage = "response2";
-        successMessage =
-          "Ok you answered that first prompt. Now answer another one!";
+        successMessage = "Ok you answered that first prompt. Now answer another one!";
+        startTimer();
       } else {
         stage = "waitingResponse";
         successMessage = "You answered both prompts. Waiting for others...";
@@ -477,7 +533,12 @@
       }
     }
 
+    if (stage === "prompt" || stage === "response1" || stage === "response2") {
+      startTimer();
+    }
+
     onDestroy(() => {
+      clearInterval(timerId);
       if (countCleanup) countCleanup();
       promptCleanup();
       responseCleanup();
@@ -582,6 +643,7 @@
                 Use Default Prompt
               </button>
             </div>
+            <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
           </div>
         {:else if stage === "waitingPrompt"}
           <div class="prompt-container">
@@ -628,6 +690,7 @@
               -->
               </div>
               <button on:click={handleSubmitResponse}>Submit Response</button>
+              <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
             </div>
           {:else}
             <p>Loading assigned prompts...</p>
@@ -672,6 +735,7 @@
               -->
               </div>
               <button on:click={handleSubmitResponse}>Submit Response</button>
+              <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
             </div>
           {:else}
             <p>Loading second prompt...</p>
@@ -856,5 +920,11 @@
 
   .success {
     color: green;
+  }
+
+  @keyframes flash {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
   }
 </style>
