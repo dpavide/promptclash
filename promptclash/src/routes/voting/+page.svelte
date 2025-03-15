@@ -197,6 +197,7 @@
     if (!ok || !currentPrompt) return;
 
     await fetchCurrentResponses();
+
     const cleanup = setupRealtimeSubscriptions();
 
     onDestroy(() => {
@@ -205,31 +206,199 @@
   });
 </script>
 
-<h1>Voting on Prompt #{promptIndex + 1}</h1>
+<div class="page-container">
+  <div class="voting-header">
+    <h1>Voting on Prompt #{promptIndex + 1}</h1>
+  </div>
 
-{#if currentPrompt}
-  <p><strong>Prompt:</strong> {currentPrompt.text}</p>
+  <div class="background-container">
+    <div class="animated-background"></div>
+    <div class="prompt-wrapper">
+      {#if currentPrompt}
+        <div class="prompt-content">
+          <p class="prompt-text">
+            <strong>Prompt:</strong>
+            {currentPrompt.text}
+          </p>
 
-  {#each responses as r (r.id)}
-    <div style="margin-bottom: 1rem;">
-      <p>{r.text}</p>
-      <p>Votes: {r.vote_count}</p>
+          <div class="responses-container">
+            {#each responses as r (r.id)}
+              <div class="response-card">
+                <p class="response-text">{r.text}</p>
+                <p class="vote-count">Votes: {r.vote_count}</p>
 
-      {#if responderIDs.has(userId)}
-        <p style="color: gray;">(You are a responder; no voting)</p>
-      {:else if r.player_id === userId}
-        <p style="color: gray;">(Your own response)</p>
-      {:else if hasVoted}
-        <p style="color: gray;">(You already voted!)</p>
+                {#if responderIDs.has(userId)}
+                  <p class="voter-status">(You answered this prompt, so you can't vote)</p>
+                {:else if r.player_id === userId}
+                  <p class="voter-status">(Your own response)</p>
+                {:else if hasVoted}
+                  <p class="voter-status">(You already voted!)</p>
+                {:else}
+                  <button
+                    class="vote-button"
+                    on:click={() => handleVote(r.id, r.player_id)}
+                  >
+                    Vote
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
       {:else}
-        <button on:click={() => handleVote(r.id, r.player_id)}>Vote</button>
+        <p class="loading">Loading prompt...</p>
+      {/if}
+
+      {#if errorMessage}
+        <p class="error-message">{errorMessage}</p>
       {/if}
     </div>
-  {/each}
-{:else}
-  <p>Loading prompt...</p>
-{/if}
+  </div>
+</div>
 
-{#if errorMessage}
-  <p style="color: red;">{errorMessage}</p>
-{/if}
+<style>
+  :global(body) {
+    margin: 0;
+    padding: 0;
+  }
+
+  .page-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #078fd8; /* Matching blue color */
+    padding: 20px;
+  }
+
+  .background-container {
+    position: relative;
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
+    aspect-ratio: 1.5;
+  }
+
+  .animated-background {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    animation: bgAnimation 1s infinite ease-in-out;
+  }
+
+  .prompt-wrapper {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 1200px;
+    padding: 2rem;
+  }
+
+  .voting-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    z-index: 2;
+    position: relative;
+  }
+
+  .voting-header h1 {
+    color: white;
+    font-size: 2.5rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .prompt-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .responses-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 4rem;
+  }
+
+  .response-card {
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(5px);
+  }
+
+  .prompt-text {
+    color: black;
+    font-size: 1.4rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+  }
+
+  .response-text {
+    color: #2c3e50;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .vote-count {
+    color: #0077cc;
+    font-weight: bold;
+    font-size: 1.2rem;
+  }
+
+  @keyframes bgAnimation {
+    0% {
+      background-image: url("backgrounds/bg1.png");
+    }
+    33% {
+      background-image: url("backgrounds/bg2.png");
+    }
+    66% {
+      background-image: url("backgrounds/bg3.png");
+    }
+    100% {
+      background-image: url("backgrounds/bg1.png");
+    }
+  }
+
+  /* Keep other existing styles from previous version */
+  .voter-status {
+    color: #303434;
+    font-size: 0.9rem;
+    margin: 0;
+  }
+
+  .vote-button {
+    background-color: rgb(1, 122, 209);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .vote-button:hover {
+    background-color: #024a7e;
+    transform: translateY(-1px);
+  }
+
+  .loading {
+    color: rgb(4, 0, 255);
+    text-align: center;
+    font-size: 1.2rem;
+  }
+
+  .error-message {
+    color: #ff4444;
+    text-align: center;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+  }
+</style>

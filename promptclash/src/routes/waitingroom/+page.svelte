@@ -4,7 +4,7 @@
   import { onMount } from "svelte";
 
   let currentGame;
-  let players: { id: string; username: string }[] = [];
+  let players: Array<{ id: string; username: string; is_host?: boolean }> = [];
   let gameId;
   export let playerimages: string[] = [
     "gameCharacters/playerRed.png",
@@ -16,6 +16,23 @@
     "gameCharacters/playerPurple.png",
     "gameCharacters/playerPink.png",
   ];
+  let currentUser = { id: "", username: "", is_host: false };
+
+  async function fetchCurrentUserProfile() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session?.user?.id) return;
+    const userId = sessionData.session.user.id;
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, username, is_host")
+      .eq("id", userId)
+      .single();
+    if (error) {
+      console.error("Error fetching current user profile:", error);
+      return;
+    }
+    currentUser = data;
+  }
 
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -37,6 +54,8 @@
     }
     currentGame = gameData;
 
+    await fetchCurrentUserProfile();
+
     const channel = supabase
       .channel("game")
       .on(
@@ -50,7 +69,7 @@
         async () => {
           const { data } = await supabase
             .from("profiles")
-            .select("id, username")
+            .select("id, username, is_host")
             .eq("game_id", currentGame.id);
           players = data ? data.sort((a, b) => a.id.localeCompare(b.id)) : [];
         }
@@ -59,7 +78,7 @@
 
     const { data: initialPlayers } = await supabase
       .from("profiles")
-      .select("id, username")
+      .select("id, username, is_host")
       .eq("game_id", currentGame.id);
     players = initialPlayers
       ? initialPlayers.sort((a, b) => a.id.localeCompare(b.id))
@@ -90,6 +109,10 @@
   });
 
   async function startGame() {
+    if (!currentUser.is_host) {
+      alert("Only the host can start the game.");
+      return;
+    }
     if (players.length < 3) {
       alert("At least 3 players are required to start the game!");
       return;
@@ -144,7 +167,7 @@
           <img src={playerimages[i % playerimages.length]} alt="Player icon" />
         </div>
         <div class="player-label">
-          {player.username}
+          {player.username} {player.is_host ? "👑 (Host)" : ""}
         </div>
       </div>
     {/each}
@@ -152,9 +175,13 @@
 {/if}
 
 <!-- Start/Play button below all players -->
-<button class="start-button" on:click={startGame} disabled={players.length < 3}>
-  Start Game ({players.length}/3+)
-</button>
+{#if currentUser.is_host}
+  <button class="start-button" on:click={startGame} disabled={players.length < 3}>
+    Start Game ({players.length}/3+)
+  </button>
+{:else}
+  <p>Waiting for the host to start the game...</p>
+{/if}
 
 <style>
   /* Basic page styling */

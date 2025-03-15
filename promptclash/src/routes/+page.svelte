@@ -38,6 +38,7 @@
           id: authData.user.id,
           username: username.trim(),
           game_id: gameId,
+          is_host: true
         },
       ]);
       if (profileError) {
@@ -95,6 +96,7 @@
           id: authData.user.id,
           username: username.trim(),
           game_id: game.id,
+          is_host: false
         },
       ]);
       if (profileError) {
