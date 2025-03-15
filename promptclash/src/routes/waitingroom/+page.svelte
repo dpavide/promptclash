@@ -152,6 +152,24 @@
       alert("At least 3 players are required to start the game!");
       return;
     }
+    // Delete players with in_game = false
+    try {
+      const { error: deleteError } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("game_id", gameId)
+        .eq("in_game", false);
+
+      
+      if (deleteError) {
+        throw new Error("Failed to delete players not in game.");
+      }
+      console.log("Deleted players with in_game = false.");
+    } catch (error) {
+      console.error("Failed to delete players:", error);
+      alert("An error occurred while deleting players.");
+      return;  // Exit function if deletion fails
+    }
     try {
       const { count: promptCount, error: countError } = await supabase
         .from("prompts")
