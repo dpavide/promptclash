@@ -18,6 +18,7 @@
   ];
   let currentUser = { id: "", username: "", is_host: false };
   let channel: any = null;
+  let delete_channel: any = null;
   let gameChannel: any = null;
 
   async function fetchCurrentUserProfile() {
@@ -41,7 +42,7 @@
 
     const { error } = await supabase
       .from("profiles")
-      .delete()
+      .update({ in_game: false })
       .eq("id", playerId)
       .eq("game_id", gameId);
 
@@ -89,7 +90,8 @@
         }
       )
       .subscribe();
-      await refreshPlayers();
+    
+    await refreshPlayers();
 
     gameChannel = supabase
       .channel("game-start")
@@ -118,7 +120,7 @@
   async function refreshPlayers() {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, username, is_host")
+      .select("id, username, is_host, in_game")
       .eq("game_id", gameId);
 
     if (error) {
@@ -126,8 +128,12 @@
       return;
     }
 
-    // Sort by ID just for consistent display
-    players = data ? data.sort((a, b) => a.id.localeCompare(b.id)) : [];
+    // Filter out players who are not in the game
+    players = data ? data.filter((player) => player.in_game) : [];
+    console.log("players in game", players)
+
+    // Sort players by ID for consistent display
+    players = players.sort((a, b) => a.id.localeCompare(b.id));
 
     // If the current user is not in that array, it means they've been kicked
     // => redirect them to the landing page
