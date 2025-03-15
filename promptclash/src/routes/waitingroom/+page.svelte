@@ -1,7 +1,7 @@
 <script lang="ts">
   import { supabase } from "$lib/supabaseClient";
   import { goto } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
 
   let currentGame;
   let players: Array<{ id: string; username: string; is_host?: boolean }> = [];
@@ -17,6 +17,8 @@
     "gameCharacters/playerPink.png",
   ];
   let currentUser = { id: "", username: "", is_host: false };
+  let channel: any = null;
+  let gameChannel: any = null;
 
   async function fetchCurrentUserProfile() {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -34,6 +36,21 @@
     currentUser = data;
   }
 
+  async function kickPlayer(playerId: string) {
+    if (!confirm("Are you sure you want to kick this player?")) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .delete()
+      .eq("id", playerId)
+      .eq("game_id", gameId);
+
+    if (error) {
+      console.error("Error kicking player:", error);
+      alert("Failed to kick the player. Please try again.");
+    }
+  }
+
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdParam = urlParams.get("gameId");
@@ -48,6 +65,7 @@
       .select("*")
       .eq("id", gameId)
       .single();
+
     if (gameError || !gameData) {
       alert("Game not found.");
       return;
@@ -56,7 +74,7 @@
 
     await fetchCurrentUserProfile();
 
-    const channel = supabase
+    channel = supabase
       .channel("game")
       .on(
         "postgres_changes",
@@ -67,24 +85,13 @@
           filter: `game_id=eq.${currentGame.id}`,
         },
         async () => {
-          const { data } = await supabase
-            .from("profiles")
-            .select("id, username, is_host")
-            .eq("game_id", currentGame.id);
-          players = data ? data.sort((a, b) => a.id.localeCompare(b.id)) : [];
+          await refreshPlayers(); // Re-fetch player list
         }
       )
       .subscribe();
+      await refreshPlayers();
 
-    const { data: initialPlayers } = await supabase
-      .from("profiles")
-      .select("id, username, is_host")
-      .eq("game_id", currentGame.id);
-    players = initialPlayers
-      ? initialPlayers.sort((a, b) => a.id.localeCompare(b.id))
-      : [];
-
-    const gameChannel = supabase
+    gameChannel = supabase
       .channel("game-start")
       .on(
         "postgres_changes",
@@ -101,12 +108,34 @@
         }
       )
       .subscribe();
+    });
 
-    return () => {
+    onDestroy(() => {
       if (channel) supabase.removeChannel(channel);
       if (gameChannel) supabase.removeChannel(gameChannel);
-    };
   });
+
+  async function refreshPlayers() {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, username, is_host")
+      .eq("game_id", gameId);
+
+    if (error) {
+      console.error("Error refreshing players:", error);
+      return;
+    }
+
+    // Sort by ID just for consistent display
+    players = data ? data.sort((a, b) => a.id.localeCompare(b.id)) : [];
+
+    // If the current user is not in that array, it means they've been kicked
+    // => redirect them to the landing page
+    if (!players.some((p) => p.id === currentUser.id)) {
+      goto("/");
+    }
+  }
+
 
   async function startGame() {
     if (!currentUser.is_host) {
@@ -162,13 +191,21 @@
   <div class="players">
     {#each players as player, i}
       <div class="player-box color-{i % 8}">
-        <div class="player-icon">
-          <!-- Show the corresponding image for the player’s index -->
-          <img src={playerimages[i % playerimages.length]} alt="Player icon" />
+        <div class="left">
+          <div class="player-icon">
+            <!-- Show the corresponding image for the player’s index -->
+            <img src={playerimages[i % playerimages.length]} alt="Player icon" />
+          </div>
+          <div class="player-label">
+            {player.username} {player.is_host ? "👑 (Host)" : ""}
+          </div>
         </div>
-        <div class="player-label">
-          {player.username} {player.is_host ? "👑 (Host)" : ""}
-        </div>
+
+        {#if currentUser.is_host && !player.is_host}
+          <button on:click={() => kickPlayer(player.id)} style="margin-left: 10px; background-color: red; color: white; border: none; border-radius: 3px; padding: 2px 5px;">
+          Kick
+          </button>
+        {/if}
       </div>
     {/each}
   </div>
@@ -220,6 +257,7 @@
     align-items: center;
     max-width: 600px;
     margin: 2rem auto;
+    gap: 1rem;
   }
 
   /* Individual player box */
@@ -232,6 +270,13 @@
     padding: 1rem;
     border-radius: 10px;
     color: #fff;
+    justify-content: space-between;
+  }
+
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
   }
 
   /* Player icon container */
@@ -297,6 +342,19 @@
     cursor: pointer;
     margin-bottom: 2rem;
   }
+
+  .kick-button {
+    background-color: red;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 5px 8px;
+    cursor: pointer;
+  }
+  .kick-button:hover {
+    background-color: #cc0000;
+  }
+
   .start-button:hover {
     background-color: #ccc;
   }
