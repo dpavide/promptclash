@@ -41,7 +41,7 @@
 
   let prompt: any = null;
   let response: string = "";
-  let fallbackPrompt = "Are you going to be employed?"; //Just in case the DB has no default promtps.
+  let fallbackPrompt = "Are you going to be employed?"; //Just in case the DB has no default prompts.
 
   let currentGame: any;
   let gameId: number | null = null;
@@ -52,6 +52,9 @@
   let playerCount: number = 0;
   let unsubscribe: any;
   let subscription: any;
+
+  let timeLeft = 60;
+  let timerId: any = null;
 
   let playerWriteImages: string[] = [
     "gameCharacters/PlayerRedWrite.png",
@@ -108,6 +111,57 @@
     }
   }
 
+  // Function to start the timer for a given stage.
+  function startTimer() {
+    clearInterval(timerId); // Clear any existing timer
+    timeLeft = 60;          //  Reset timer to 60 seconds
+    timerId = setInterval(() => {
+      timeLeft--;
+      //  When time is running low, the UI will flash red (see getTimerStyle below)
+      if (timeLeft <= 0) {
+        clearInterval(timerId);
+        forceSubmission(); // Force-submit if time runs out
+      }
+    }, 1000);
+  }
+
+  //Function to clear the timer manually
+  function stopTimer() {
+    clearInterval(timerId);
+  }
+
+  //Function to determine timer style based on timeLeft
+  function getTimerStyle() {
+    if (timeLeft <= 10) {
+      return "color: red; animation: flash 1s infinite;";
+    } else if (timeLeft <= 15) {
+      return "color: orange;";
+    } else if (timeLeft <= 30) {
+      return "color: yellow;";
+    } else {
+      return "color: black;";
+    }
+  }
+
+  // Force submission if timer reaches 0
+  async function forceSubmission() {
+    // Only force submission if still in an input stage
+    if (stage === "prompt") {
+      if (!promptInput.trim()) {
+        await handleSubmitPrompt(true);
+      } else {
+        await handleSubmitPrompt(false);
+      }
+    } else if (stage === "response1" || stage === "response2") {
+      // For responses, submit even if empty (default to "{no response given}")
+      if (!responseInput.trim()) {
+        responseInput = "{no response given}";
+      }
+      await handleSubmitResponse();
+    }
+    // No auto-action for waiting stages.
+  }
+
   let players: {
     id: string;
     username?: string;
@@ -129,20 +183,6 @@
     return gameData;
   }
 
-  // async function fetchPrompt(promptId: number) {
-  //   const { data: fetchedPrompt, error: promptError } = await supabase
-  //     .from("prompts")
-  //     .select("*")
-  //     .eq("id", promptId)
-  //     .single();
-  //   if (promptError || !fetchedPrompt) {
-  //     console.error("Error fetching prompt:", promptError);
-  //     goto("/");
-  //     return null;
-  //   }
-  //   return fetchedPrompt;
-  // }
-
   async function setupPlayerCountMonitoring() {
     try {
       const { data: players, error } = await supabase
@@ -151,16 +191,16 @@
         .eq("game_id", gameId);
       if (error) {
         console.error("Error fetching initial players:", error);
-        return;
+        return null;
       }
       playerCount = players.length;
       console.log(`Initial players in game ${gameId}:`, playerCount);
 
-      // Subscribe to player count changes without automatic redirect
-      unsubscribe = monitorPlayerCount(
+      // Return the cleanup function directly
+      return monitorPlayerCount(
         gameId,
         () => {
-          // Removed automatic redirect to prevent interference with voting screen navigation
+          /* onReady callback */
         },
         (newCount: number) => {
           playerCount = newCount;
@@ -168,11 +208,12 @@
       );
     } catch (error) {
       console.error("Error setting up player count monitoring:", error);
+      return null;
     }
   }
 
-  function subscribeToPromptSubmissions() {
-    promptSubscription = supabase
+  function subscribeToPromptSubscriptions() {
+    const channel = supabase
       .channel("prompt-submissions")
       .on(
         "postgres_changes",
@@ -189,6 +230,8 @@
         }
       )
       .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }
 
   // check if all players have submitted_prompt = true
@@ -206,20 +249,14 @@
       // all have prompts => assign 2 prompts for each user
       await assignPromptsForCurrentUser();
       stage = "response1";
-      successMessage =
-        "All players have submitted prompts! Please answer your first assigned prompt.";
+      successMessage = "All players have submitted prompts! Please answer your first assigned prompt.";
+        startTimer();
     }
   }
 
-  /**
-   * Handle And Submit Prompt (useDefault: boolean)
-   * - If useDefault is true, pass an empty string so the API picks one of the default prompts.
-   * - Otherwise, use the text typed by the user.
-   * After submitting, fetch all prompts, assign the next prompt (cyclically) that isn’t the user's own,
-   * and then switch the stage to "waiting", then to stage "response" once all others have added their prompts.
-   */
   // Submit the user's prompt or default
   async function handleSubmitPrompt(useDefault: boolean) {
+    stopTimer(); 
     errorMessage = "";
     if (!userId) {
       errorMessage = "No user is signed in.";
@@ -228,7 +265,6 @@
     const typedPrompt = useDefault ? "" : promptInput.trim();
     try {
       await submitPlayerPrompt(gameId, userId, typedPrompt);
-      // mark user => submitted_prompt = true
       const { error } = await supabase
         .from("profiles")
         .update({ submitted_prompt: true })
@@ -236,7 +272,6 @@
       if (error) {
         console.error("Error marking submitted_prompt:", error);
       }
-      // switch to waitingPrompt
       stage = "waitingPrompt";
     } catch (err) {
       console.error("Error submitting prompt:", err);
@@ -246,7 +281,6 @@
 
   async function assignPromptsForCurrentUser() {
     try {
-      // fetch all prompts
       const { data: allPrompts, error: pErr } = await supabase
         .from("prompts")
         .select("id, text, player_id")
@@ -256,7 +290,6 @@
         return;
       }
 
-      // fetch all players
       const { data: allPlayers, error: plErr } = await supabase
         .from("profiles")
         .select("id")
@@ -273,9 +306,6 @@
         return;
       }
 
-      // For each prompt i, the 2 responders are (i+1)%n, (i+2)%n
-      // So each user i is assigned the prompts from (i-1)%n and (i-2)%n
-      // Or simpler: we do user i answers from (i+1)%n and (i+2)%n
       const owner1 = allPlayers[(index + 1) % n].id;
       const owner2 = allPlayers[(index + 2) % n].id;
 
@@ -295,6 +325,7 @@
   }
 
   async function handleSubmitResponse() {
+    stopTimer(); 
     if (!assignedPrompts || assignedPrompts.length === 0) {
       errorMessage = "No assigned prompts found.";
       return;
@@ -308,7 +339,6 @@
       return;
     }
 
-    // The user is responding to assignedPrompts[responseIndex].
     const targetPrompt = assignedPrompts[responseIndex];
     if (!targetPrompt) {
       errorMessage = "Could not find the assigned prompt to answer.";
@@ -316,25 +346,21 @@
     }
     const profanityCheckedAnswer = await checkProfanity(responseInput);
     try {
-      // 1) Submit the response
       await submitResponse(
         gameId,
         userId,
         targetPrompt.id,
         profanityCheckedAnswer
       );
-      // 2) Clear the input
       responseInput = "";
       errorMessage = "";
 
-      // if we are on the first prompt => move on to second
       if (responseIndex === 0 && assignedPrompts.length > 1) {
         responseIndex = 1;
         stage = "response2";
-        successMessage =
-          "Ok you answered that first prompt. Now answer another one!";
+        successMessage = "Ok you answered that first prompt. Now answer another one!";
+        startTimer();
       } else {
-        // user answered second prompt => done
         stage = "waitingResponse";
         successMessage = "You answered both prompts. Waiting for others...";
         await supabase
@@ -410,12 +436,10 @@
 
   async function fetchPlayersAndSubscribe() {
     await fetchPlayers();
-    // Subscribe to realtime updates on profiles.
     const unsubscribePlayers = subscribeToPlayerUpdates();
     return unsubscribePlayers;
   }
 
-  // NEW: fetch the players (only id and username) to determine join order for images
   async function fetchPlayers() {
     const { data: profilesData, error } = await supabase
       .from("profiles")
@@ -484,16 +508,16 @@
     currentGame = await fetchGame();
     await fetchPlayers();
 
-    setupPlayerCountMonitoring();
+    // Setup subscriptions
+    const countCleanup = await setupPlayerCountMonitoring();
+    const promptCleanup = subscribeToPromptSubscriptions();
+    const responseCleanup = subscribeToResponseSubmissions();
+    const playersCleanup = subscribeToPlayerUpdates();
 
-    subscribeToPromptSubmissions();
     await checkIfAllSubmittedPrompts();
-
-    subscribeToResponseSubmissions();
     await checkIfAllSubmittedResponses();
 
-    profilesSubscription = subscribeToPlayerUpdates();
-
+    // Canvas init
     await tick();
     let tries = 10;
     while (!canvas && tries > 0) {
@@ -506,31 +530,30 @@
       if (ctx) {
         ctx.fillStyle = "white";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        console.log("Canvas initialized successfully:", ctx);
       }
-    } else {
-      console.error("Canvas still not available!");
     }
+
+    if (stage === "prompt" || stage === "response1" || stage === "response2") {
+      startTimer();
+    }
+
+    onDestroy(() => {
+      clearInterval(timerId);
+      if (countCleanup) countCleanup();
+      promptCleanup();
+      responseCleanup();
+      playersCleanup();
+    });
   });
 
   onDestroy(() => {
-    if (unsubscribeCount) {
-      if (typeof unsubscribeCount.unsubscribe === "function") {
-        unsubscribe.unsubscribe();
-      } else if (typeof unsubscribeCount === "function") {
-        unsubscribeCount();
-      }
-    }
-    if (promptSubscription) supabase.removeChannel(promptSubscription);
-    if (responseSubscription) supabase.removeChannel(responseSubscription);
-    if (profilesSubscription && typeof profilesSubscription === "function") {
-      profilesSubscription();
+    if (unsubscribeCount && typeof unsubscribeCount === "function") {
+      unsubscribeCount();
     }
   });
 
-  // subscribe => each time a user updates 'responses', we check if all are done
   function subscribeToResponseSubmissions() {
-    responseSubscription = supabase
+    const channel = supabase
       .channel("response-submissions")
       .on(
         "postgres_changes",
@@ -545,11 +568,10 @@
         }
       )
       .subscribe();
+    return () => supabase.removeChannel(channel);
   }
 
-  // check if all players have submitted_response = true
   async function checkIfAllSubmittedResponses() {
-    // 1) fetch all players
     const { data: players, error: e1 } = await supabase
       .from("profiles")
       .select("id")
@@ -560,7 +582,6 @@
     }
     const totalPlayers = players.length;
 
-    // 2) fetch all responses
     const { data: allResponses, error: e2 } = await supabase
       .from("responses")
       .select("player_id")
@@ -570,13 +591,11 @@
       return;
     }
 
-    // 3) build a map: how many responses each user has
     const counts: Record<string, number> = {};
     for (const r of allResponses) {
       counts[r.player_id] = (counts[r.player_id] || 0) + 1;
     }
 
-    // 4) check if each user has at least 2
     let doneCount = 0;
     for (const p of players) {
       if ((counts[p.id] || 0) >= 2) {
@@ -588,148 +607,150 @@
       `Response stage: total=${totalPlayers}, responded2=${doneCount}`
     );
     if (doneCount === totalPlayers) {
-      // all players have 2 responses => go to /voting
       goto(`/voting?gameId=${gameId}&promptIndex=0`);
     }
   }
 </script>
 
 <div class="game-container">
-  <img src="backgrounds/bgstart.png" alt="Background" class="backgroundbox" />
-  <div class="prompt-wrapper">
-    {#if errorMessage}
-      <p class="error">{errorMessage}</p>
-    {/if}
-    <!-- {#if successMessage}
-      <p class="success">{successMessage}</p>
-    {/if} -->
+  <!-- NEW container that holds the background image and the prompt overlay -->
+  <div class="background-container">
+    <div class="background-container">
+      <div class="animated-background"></div>
 
-    {#if stage === "prompt"}
-      <!-- user picks or types a prompt -->
-      <div class="prompt-container">
-        <p>Write your own prompt or use a default:</p>
-        <input
-          type="text"
-          bind:value={promptInput}
-          placeholder="Type something..."
-        />
-        <div class="button-group" style="margin-top: 1rem;">
-          <button on:click={() => handleSubmitPrompt(false)}
-            >Submit Prompt</button
-          >
-          <button on:click={() => handleSubmitPrompt(true)}
-            >Use Default Prompt</button
-          >
-        </div>
-      </div>
-    {:else if stage === "waitingPrompt"}
-      <div class="prompt-container">
-        <h2>Prompt submitted!</h2>
-        <p>Waiting for other players to submit their prompts...</p>
-      </div>
-    {:else if stage === "response1"}
-      {#if assignedPrompts.length > 0}
-        <div class="prompt-container">
-          <p><strong>Prompt #1</strong>:</p>
-          <p><em>{assignedPrompts[0].text}</em></p>
-          <!-- New container for written and drawn responses -->
-          <div class="response-area">
-            <div class="text-area-wrapper">
-              <textarea
-                bind:value={responseInput}
-                placeholder="Type your response for prompt #1..."
-              ></textarea>
+      <!-- Now the prompt-wrapper is nested INSIDE the background image container -->
+      <div class="prompt-wrapper">
+        {#if errorMessage}
+          <p class="error">{errorMessage}</p>
+        {/if}
+        <!-- {#if successMessage}
+        <p class="success">{successMessage}</p>
+      {/if} -->
+
+        {#if stage === "prompt"}
+          <div class="prompt-container">
+            <p>Write your own prompt or use a default:</p>
+            <input
+              type="text"
+              bind:value={promptInput}
+              placeholder="Type something..."
+            />
+            <div class="button-group" style="margin-top: 1rem;">
+              <button on:click={() => handleSubmitPrompt(false)}>
+                Submit Prompt
+              </button>
+              <button on:click={() => handleSubmitPrompt(true)}>
+                Use Default Prompt
+              </button>
             </div>
-            <!-- Drawing area commented for now-->
-            <!-- 
-            <div class="drawing-area">
-              <p>Or draw your response:</p>
-              <canvas
-                bind:this={canvas}
-                width="420"
-                height="200"
-                on:mousedown={startDrawing}
-                on:mousemove={draw}
-                on:mouseup={stopDrawing}
-                on:mouseleave={stopDrawing}
-              ></canvas>
-              <div class="controls">
-                <label>
-                  Color: <input type="color" bind:value={color} />
-                </label>
-                <label>
-                  Size:
-                  <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
-                  {lineWidth}px
-                </label>
-                <button on:click={clearCanvas}>Clear</button>
-                <button on:click={submitDrawing}>Submit Drawing</button>
-              </div>
-            </div>
-          -->
+            <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
           </div>
-          <button on:click={handleSubmitResponse}>Submit Response</button>
-        </div>
-      {:else}
-        <p>Loading assigned prompts...</p>
-      {/if}
-    {:else if stage === "response2"}
-      {#if assignedPrompts.length > 1}
-        <div class="prompt-container">
-          <p><strong>Prompt #2</strong>:</p>
-          <p><em>{assignedPrompts[1].text}</em></p>
-          <!-- New container for written and drawn responses -->
-          <div class="response-area">
-            <div class="text-area-wrapper">
-              <textarea
-                bind:value={responseInput}
-                placeholder="Type your response..."
-              ></textarea>
-            </div>
-            <!-- Drawing area commented for now-->
-            <!--<div class="drawing-area">
-              <p>Or draw your response:</p>
-              <canvas
-                bind:this={canvas}
-                width="420"
-                height="200"
-                on:mousedown={startDrawing}
-                on:mousemove={draw}
-                on:mouseup={stopDrawing}
-                on:mouseleave={stopDrawing}
-              ></canvas>
-              <div class="controls">
-                <label>
-                  Color: <input type="color" bind:value={color} />
-                </label>
-                <label>
-                  Size:
-                  <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
-                  {lineWidth}px
-                </label>
-                <button on:click={clearCanvas}>Clear</button>
-                <button on:click={submitDrawing}>Submit Drawing</button>
-              </div>
-            </div>
-            -->
+        {:else if stage === "waitingPrompt"}
+          <div class="prompt-container">
+            <h2>Prompt submitted!</h2>
+            <p>Waiting for other players to submit their prompts...</p>
           </div>
-          <button on:click={handleSubmitResponse}>Submit Response</button>
-        </div>
-      {:else}
-        <p>Loading second prompt...</p>
-      {/if}
-    {:else if stage === "waitingResponse"}
-      <div class="prompt-container">
-        <h2>You answered both prompts!</h2>
-        <p>Waiting for other players to finish responding...</p>
+        {:else if stage === "response1"}
+          {#if assignedPrompts.length > 0}
+            <div class="prompt-container">
+              <p><strong>Prompt #1</strong>:</p>
+              <p><em>{assignedPrompts[0].text}</em></p>
+              <div class="response-area">
+                <div class="text-area-wrapper">
+                  <textarea
+                    bind:value={responseInput}
+                    placeholder="Type your response for prompt #1..."
+                  ></textarea>
+                </div>
+                <!-- Drawing area commented out for now
+              <div class="drawing-area">
+                <p>Or draw your response:</p>
+                <canvas
+                  bind:this={canvas}
+                  width="420"
+                  height="200"
+                  on:mousedown={startDrawing}
+                  on:mousemove={draw}
+                  on:mouseup={stopDrawing}
+                  on:mouseleave={stopDrawing}
+                ></canvas>
+                <div class="controls">
+                  <label>
+                    Color: <input type="color" bind:value={color} />
+                  </label>
+                  <label>
+                    Size:
+                    <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
+                    {lineWidth}px
+                  </label>
+                  <button on:click={clearCanvas}>Clear</button>
+                  <button on:click={submitDrawing}>Submit Drawing</button>
+                </div>
+              </div>
+              -->
+              </div>
+              <button on:click={handleSubmitResponse}>Submit Response</button>
+              <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
+            </div>
+          {:else}
+            <p>Loading assigned prompts...</p>
+          {/if}
+        {:else if stage === "response2"}
+          {#if assignedPrompts.length > 1}
+            <div class="prompt-container">
+              <p><strong>Prompt #2</strong>:</p>
+              <p><em>{assignedPrompts[1].text}</em></p>
+              <div class="response-area">
+                <div class="text-area-wrapper">
+                  <textarea
+                    bind:value={responseInput}
+                    placeholder="Type your response..."
+                  ></textarea>
+                </div>
+                <!-- Drawing area commented out for now
+              <div class="drawing-area">
+                <p>Or draw your response:</p>
+                <canvas
+                  bind:this={canvas}
+                  width="420"
+                  height="200"
+                  on:mousedown={startDrawing}
+                  on:mousemove={draw}
+                  on:mouseup={stopDrawing}
+                  on:mouseleave={stopDrawing}
+                ></canvas>
+                <div class="controls">
+                  <label>
+                    Color: <input type="color" bind:value={color} />
+                  </label>
+                  <label>
+                    Size:
+                    <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
+                    {lineWidth}px
+                  </label>
+                  <button on:click={clearCanvas}>Clear</button>
+                  <button on:click={submitDrawing}>Submit Drawing</button>
+                </div>
+              </div>
+              -->
+              </div>
+              <button on:click={handleSubmitResponse}>Submit Response</button>
+              <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
+            </div>
+          {:else}
+            <p>Loading second prompt...</p>
+          {/if}
+        {:else if stage === "waitingResponse"}
+          <div class="prompt-container">
+            <h2>You answered both prompts!</h2>
+            <p>Waiting for other players to finish responding...</p>
+          </div>
+        {/if}
       </div>
-    {/if}
+    </div>
   </div>
 
-  <!-- NEW: Display players with images based on local state.
-       For the current user, if stage is waitingPrompt or waitingResponse, we use the idle image;
-       all other players use the writing image.
-       Join order is determined by sorting the players by id. -->
+  <!-- Players container remains outside -->
   <div class="players">
     {#each players.sort((a, b) => a.id.localeCompare(b.id)) as player, i}
       <img src={getPlayerImage(player, i)} alt="Player" class="player" />
@@ -750,15 +771,26 @@
     min-height: 100vh;
     background-color: #078fd8;
   }
-  .backgroundbox {
-    width: 80%;
-    height: 60%;
-    background-size: cover;
+
+  /* NEW: A container for the background + prompt overlay */
+  .background-container {
+    position: relative;
+    width: 100%; /* Reduced from 80% */
+    max-width: 1600px; /* Reduced from 900px */
+    margin: 10px auto; /* Center the container */
+    aspect-ratio: 1.5; /* Maintain aspect ratio */
+  }
+
+  .animated-background {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    background-size: contain;
+    background-repeat: no-repeat;
     background-position: center;
-    border-radius: 12px;
-    margin-top: 10px;
     animation: bgAnimation 1s infinite ease-in-out;
   }
+
   @keyframes bgAnimation {
     0% {
       background-image: url("backgrounds/bg1.png");
@@ -773,16 +805,17 @@
       background-image: url("backgrounds/bg1.png");
     }
   }
+
   .prompt-wrapper {
-    align-items: center;
-    justify-content: center;
     position: absolute;
-    top: 35%;
+    top: 40%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 60%;
-    max-width: 500px;
+    width: 100%; /* Increased width for better content fit */
+    max-width: 400px; /* Adjusted for smaller container */
+    z-index: 2;
   }
+
   .prompt-container {
     font-size: 1em;
     display: flex;
@@ -790,15 +823,17 @@
     align-items: center;
     gap: 15px;
   }
-  /* New container to display textarea and drawing area side-by-side */
+
   .response-area {
     display: flex;
     gap: 20px;
     width: 100%;
   }
+
   .text-area-wrapper {
     flex: 1;
   }
+
   .text-area-wrapper textarea {
     width: 100%;
     height: 150px;
@@ -808,7 +843,7 @@
     resize: vertical;
     box-sizing: border-box;
   }
-  /* Resizable drawing area */
+
   .drawing-area {
     flex: 1;
     resize: both;
@@ -819,11 +854,13 @@
     padding: 5px;
     box-sizing: border-box;
   }
+
   .drawing-area canvas {
     display: block;
     width: 100%;
     height: auto;
   }
+
   .controls {
     margin-top: 10px;
     display: flex;
@@ -831,6 +868,7 @@
     align-items: center;
     flex-wrap: wrap;
   }
+
   textarea {
     /* Fallback textarea styles for other areas if needed */
     width: 95%;
@@ -842,6 +880,7 @@
     resize: none;
     box-sizing: border-box;
   }
+
   button {
     padding: 10px 15px;
     background-color: #0077cc;
@@ -853,6 +892,7 @@
   button:hover {
     background-color: #005fa3;
   }
+
   .players {
     display: flex;
     justify-content: center;
@@ -863,7 +903,9 @@
     bottom: 0;
     left: 0;
     width: 100vw;
+    z-index: 1;
   }
+
   .player {
     width: 12vw;
     height: 12vw;
@@ -871,10 +913,18 @@
     max-height: 150px;
     margin: 0;
   }
+
   .error {
     color: red;
   }
+
   .success {
     color: green;
+  }
+
+  @keyframes flash {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
   }
 </style>

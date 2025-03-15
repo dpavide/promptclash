@@ -103,8 +103,8 @@
       .subscribe();
 
     return () => {
-      channel.unsubscribe();
-      gameChannel.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
+      if (gameChannel) supabase.removeChannel(gameChannel);
     };
   });
 
