@@ -30,6 +30,28 @@
     "gameCharacters/playerPink.png",
   ];
 
+  let playerWriteImages: string[] = [
+    "gameCharacters/PlayerRedWrite.png",
+    "gameCharacters/PlayerOrangeWrite.png",
+    "gameCharacters/PlayerYellowWrite.png",
+    "gameCharacters/PlayerLightGreenWrite.png",
+    "gameCharacters/PlayerDarkGreenWrite.png",
+    "gameCharacters/PlayerBlueWrite.png",
+    "gameCharacters/PlayerPurpleWrite.png",
+    "gameCharacters/PlayerPinkWrite.png",
+  ];
+
+  let playerIdleImages: string[] = [
+    "gameCharacters/PlayerRedIdle.png",
+    "gameCharacters/PlayerOrangeIdle.png",
+    "gameCharacters/PlayerYellowIdle.png",
+    "gameCharacters/PlayerLightGreenIdle.png",
+    "gameCharacters/PlayerDarkGreenIdle.png",
+    "gameCharacters/PlayerBlueIdle.png",
+    "gameCharacters/PlayerPurpleIdle.png",
+    "gameCharacters/PlayerPinkIdle.png",
+  ];
+
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const param = urlParams.get("gameId");
@@ -195,7 +217,7 @@
               <div class="tieImage">
                 <img
                   src={playerHeadImages[responderA?.playerIndex]}
-                  alt="Player Image"
+                  alt="Player"
                 />
               </div>
               <div class="tieName">{responderA?.username}</div>
@@ -205,7 +227,7 @@
               <div class="tieImage">
                 <img
                   src={playerHeadImages[responderB?.playerIndex]}
-                  alt="Player Image"
+                  alt="Player"
                 />
               </div>
               <div class="tieName">{responderB?.username}</div>
@@ -218,7 +240,7 @@
             <div class="winnerImage">
               <img
                 src={playerHeadImages[responderA?.playerIndex]}
-                alt="Winner Image"
+                alt="Winner"
               />
             </div>
             <div class="winnerName">Winner:<br />{responderA?.username}</div>
@@ -230,7 +252,7 @@
             <div class="loserImage">
               <img
                 src={playerHeadImages[responderB?.playerIndex]}
-                alt="Loser Image"
+                alt="Loser"
               />
             </div>
             <div class="loserName">2nd:<br />{responderB?.username}</div>
@@ -247,36 +269,12 @@
 {/if}
 
 <div class="decorations">
-  <img
-    src={decorationSet === 0
-      ? "gameCharacters/PlayerOrangeIdle.png"
-      : "gameCharacters/PlayerOrangeWrite.png"}
-    alt="Decoration Orange"
-  />
-  <img
-    src={decorationSet === 0
-      ? "gameCharacters/PlayerYellowIdle.png"
-      : "gameCharacters/PlayerYellowWrite.png"}
-    alt="Decoration Yellow"
-  />
-  <img
-    src={decorationSet === 0
-      ? "gameCharacters/PlayerDarkGreenIdle.png"
-      : "gameCharacters/PlayerDarkGreenWrite.png"}
-    alt="Decoration Dark Green"
-  />
-  <img
-    src={decorationSet === 0
-      ? "gameCharacters/PlayerLightGreenIdle.png"
-      : "gameCharacters/PlayerLightGreenWrite.png"}
-    alt="Decoration Light Green"
-  />
-  <img
-    src={decorationSet === 0
-      ? "gameCharacters/PlayerPurpleIdle.png"
-      : "gameCharacters/PlayerPurpleWrite.png"}
-    alt="Decoration Purple"
-  />
+  {#each players as _, i}
+    <img
+      src={decorationSet === 0 ? playerIdleImages[i] : playerWriteImages[i]}
+      alt="Player decoration"
+    />
+  {/each}
 </div>
 
 <style>
