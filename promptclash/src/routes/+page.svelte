@@ -39,7 +39,7 @@
           username: username.trim(),
           game_id: gameId,
           is_host: true,
-          in_game: true
+          in_game: true,
         },
       ]);
       if (profileError) {
@@ -98,7 +98,7 @@
           username: username.trim(),
           game_id: game.id,
           is_host: false,
-          in_game: true
+          in_game: true,
         },
       ]);
       if (profileError) {
@@ -147,7 +147,7 @@
         bind:value={username}
         placeholder="Name"
         class="name-input"
-        maxlength=25
+        maxlength="25"
         required
       />
 
@@ -197,6 +197,19 @@
       />
     </div>
   </div>
+  <div class="rules-section">
+    <img src="backgrounds/rules.png" alt="Game Rules" class="rules-image" />
+  </div>
+  <div class="text-at-bottom">
+    <p>
+      DISCLAIMER: The owners of this site are not responsible for any user
+      generated content (drawing, messages, username).
+    </p>
+    <p>
+      Inappropriate language is filtered and players can be kicked, however this
+      does not guarantee the filtering of inappropriate content.
+    </p>
+  </div>
 </div>
 
 <style>
@@ -208,14 +221,33 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    padding: 20px 0;
     min-height: 100vh;
     background-color: #078fd8;
+  }
+  .rules-section {
+    width: 80%;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .rules-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 5px;
   }
   .header h1 {
     font-size: 3em;
     color: white;
     text-shadow: 2px 2px 5px black;
+  }
+  .text-at-bottom {
+    font-size: 1.5em;
   }
   .main-content {
     display: flex;
