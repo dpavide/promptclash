@@ -264,7 +264,8 @@
     }
     const typedPrompt = useDefault ? "" : promptInput.trim();
     try {
-      await submitPlayerPrompt(gameId, userId, typedPrompt);
+      const promptToSubmit = useDefault ? "" : await checkProfanity(typedPrompt);
+      await submitPlayerPrompt(gameId, userId, promptToSubmit);
       const { error } = await supabase
         .from("profiles")
         .update({ submitted_prompt: true })

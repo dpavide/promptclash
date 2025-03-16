@@ -17,6 +17,29 @@ export async function initializeDatabase() {
   return data;
 }
 
+export async function checkProfanity(text) {
+  try {
+    const res = await fetch(
+      `https://api.api-ninjas.com/v1/profanityfilter?text=${encodeURIComponent(text)}`,
+      {
+        headers: {
+          "X-Api-Key": "YegnxWw3X0xgvCkPMEaUCg==ugPzwG3b5VAktHVf"
+        }
+      }
+    );
+    if (!res.ok) {
+      throw new Error(`API Error: ${res.status} ${await res.text()}`);
+    }
+    const result = await res.json();
+    // 'result.censored' is assumed to be the entire text with asterisks where profanity was found
+    return result.censored;
+  } catch (error) {
+    console.error("Error checking profanity:", error);
+    // Fallback: if the API call fails, just return the original text
+    return text;
+  }
+}
+
 // Function that requires explicit game ID
 export async function addUserToGame(username, authData, gameId) {
   if (!username) {

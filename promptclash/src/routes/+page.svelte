@@ -1,7 +1,7 @@
 <script>
   import { supabase } from "$lib/supabaseClient";
   import { goto } from "$app/navigation";
-  // Notice: we no longer import initializeDatabase here
+  import { checkProfanity } from "$lib/api";
 
   let username = "";
   let roomCode = "";
@@ -11,6 +11,11 @@
     if (!username.trim()) {
       alert("Please enter a username");
       return;
+    }
+    const censoredUsername = await checkProfanity(username.trim());
+    if (censoredUsername !== username.trim()) {
+      alert("Inappropriate username, you can't join the lobby.");
+      return; // block them from proceeding
     }
     try {
       // Sign in anonymously
@@ -64,6 +69,11 @@
     if (!roomCode.trim()) {
       alert("Please enter a room code");
       return;
+    }
+    const censoredUsername = await checkProfanity(username.trim());
+    if (censoredUsername !== username.trim()) {
+      alert("Inappropriate username, you can't join the lobby.");
+      return; // block them
     }
     try {
       // Look up the game by its ID (the room code)
@@ -165,7 +175,7 @@
         </button>
       </div>
 
-      <small>OR</small>
+      <small style="font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;">OR</small>
 
       <!-- Create Room Button -->
       <button class="play-button" on:click={handleCreateRoom}>
@@ -243,6 +253,7 @@
   }
   .header h1 {
     font-size: 3em;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
     color: white;
     text-shadow: 2px 2px 5px black;
   }
