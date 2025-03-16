@@ -211,13 +211,16 @@
     <img src="backgrounds/rules.png" alt="Game Rules" class="rules-image" />
   </div>
   <div class="text-at-bottom">
+    <a href="/tos" class="terms-link">
+      Read Terms of Service
+    </a>
     <p>
-      DISCLAIMER: The owners of this site are not responsible for any user
-      generated content (drawing, messages, username).
+      DISCLAIMER:  The owners of this website are not responsible for any user-generated content,
+      including but not limited to drawings, messages, and usernames.
     </p>
     <p>
-      Inappropriate language is filtered and players can be kicked, however this
-      does not guarantee the filtering of inappropriate content.
+      While inappropriate language is subject to filtering and users may be removed for violations,
+      we cannot guarantee the complete elimination of all inappropriate content.
     </p>
   </div>
 </div>
@@ -258,7 +261,8 @@
     text-shadow: 2px 2px 5px black;
   }
   .text-at-bottom {
-    font-size: 1.5em;
+    font-size: 1em;
+    color: white;
   }
   .main-content {
     display: flex;
