@@ -193,11 +193,22 @@
   {#if errorMessage}
     <p style="color: red;">{errorMessage}</p>
   {/if}
-  <ol>
-    {#each finalScores as player}
-      <li><strong>{player.username}</strong>: {player.score} points</li>
+  <div class="scoreboard">
+    {#each finalScores as player, i}
+      <div class="player-entry">
+        <div class="player-rank">{i + 1}</div>
+        <img
+          src={playerHeadImages[players.findIndex((p) => p.id === player.id)]}
+          alt={player.username}
+          class="player-avatar"
+        />
+        <div class="player-info">
+          <span class="username">{player.username}</span>
+          <span class="score">{player.score} points</span>
+        </div>
+      </div>
     {/each}
-  </ol>
+  </div>
 {:else if currentPrompt}
   <div class="page-container">
     <div class="frame">
@@ -282,8 +293,53 @@
   h2 {
     text-align: center;
   }
-  ol {
-    list-style-type: decimal;
+  .scoreboard {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 80%;
+    max-width: 600px;
+    margin: 2rem auto;
+  }
+
+  .player-entry {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .player-avatar {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+  }
+
+  .player-info {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+  }
+
+  .username {
+    font-weight: bold;
+    font-size: 1.2rem;
+  }
+
+  .score {
+    color: #666;
+    font-size: 0.9rem;
+  }
+
+  .player-rank {
+    font-size: 1.5rem;
+    font-weight: bold;
+    min-width: 40px;
+    text-align: center;
+    color: #4a90e2;
   }
   button {
     padding: 10px 20px;
