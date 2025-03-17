@@ -13,17 +13,18 @@
   let currentPrompt: any = null;
   let errorMessage = "";
   let gameSubscription: any;
-  let readySubscription: any; // subscription for ready status changes
+  let readySubscription: any;
   let result: any = null;
 
   let promptAuthorName = "";
   let responderA: any = null;
   let responderB: any = null;
 
-  // Ready functionality variables:
+  // Ready functionality
   let userId = "";
   let hasPressedReady = false;
 
+  // Player images (adjust paths as needed)
   let playerHeadImages: string[] = [
     "gameCharacters/playerRed.png",
     "gameCharacters/playerOrange.png",
@@ -34,7 +35,6 @@
     "gameCharacters/playerPurple.png",
     "gameCharacters/playerPink.png",
   ];
-
   let playerWriteImages: string[] = [
     "gameCharacters/PlayerRedWrite.png",
     "gameCharacters/PlayerOrangeWrite.png",
@@ -45,7 +45,6 @@
     "gameCharacters/PlayerPurpleWrite.png",
     "gameCharacters/PlayerPinkWrite.png",
   ];
-
   let playerIdleImages: string[] = [
     "gameCharacters/PlayerRedIdle.png",
     "gameCharacters/PlayerOrangeIdle.png",
@@ -57,7 +56,7 @@
     "gameCharacters/PlayerPinkIdle.png",
   ];
 
-  // Checks if all players in the game have their ready flag set to true.
+  // Function to check if all players are ready (all profiles.ready === true)
   async function checkAllReady(gameId: number): Promise<boolean> {
     const { data, error } = await supabase
       .from("profiles")
@@ -70,7 +69,7 @@
     return data.every((profile) => profile.ready === true);
   }
 
-  // When the button is clicked, update this player's ready flag in the database.
+  // Called when a player clicks the ready button.
   async function handleReady() {
     if (hasPressedReady) {
       alert("You have already pressed ready!");
@@ -87,26 +86,28 @@
       return;
     }
     hasPressedReady = true;
-    // Check immediately if everyone is ready.
+    // Immediately check if everyone is ready.
     const allReady = await checkAllReady(gameId);
     if (allReady) {
       nextPrompt();
     }
   }
 
-  // Realtime subscription to monitor players' ready status.
+  // Setup a realtime subscription on the "profiles" table (for the current game)
+  // similar to how the voting page subscribes to the "votes" table.
   function setupReadySubscription() {
     readySubscription = supabase
       .channel("game-ready")
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "*", // you could also use "UPDATE" if you want to restrict to update events
           schema: "public",
           table: "profiles",
           filter: `game_id=eq.${gameId}`,
         },
-        async () => {
+        async (payload) => {
+          // When any profile changes, check if all players are ready.
           const allReady = await checkAllReady(gameId);
           if (allReady) {
             nextPrompt();
@@ -116,9 +117,10 @@
       .subscribe();
   }
 
-  // This function resets the ready flags and navigates to the next prompt.
+  // Reset ready flags for all players and navigate to the next page.
+  // If finalMode is true, navigate to a dedicated final page.
   async function nextPrompt() {
-    // Reset ready flags for all players
+    // Reset everyone’s ready flag.
     const { error } = await supabase
       .from("profiles")
       .update({ ready: false })
@@ -126,14 +128,38 @@
     if (error) {
       console.error("Error resetting ready flags:", error);
     }
-    const newIndex = promptIndex + 1;
-    if (newIndex !== promptIndex) {
+    if (finalMode) {
+      goto(`/final?gameId=${gameId}`);
+    } else {
+      const newIndex = promptIndex + 1;
       goto(`/voting?gameId=${gameId}&promptIndex=${newIndex}`);
     }
   }
 
+  // Helper: Fetch responder info based on calculated results.
+  async function fetchResponderInfo(respObj) {
+    if (!respObj?.player_id) {
+      return {
+        username: "Unknown",
+        vote_count: respObj?.vote_count || 0,
+        playerIndex: -1,
+      };
+    }
+    const { data: p } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", respObj.player_id)
+      .single();
+    return {
+      username: p?.username || "Unknown",
+      vote_count: respObj.vote_count || 0,
+      playerIndex: players.findIndex((p) => p.id === respObj.player_id),
+    };
+  }
+
   let decorationSet = 0;
-  let decorationInterval;
+  let decorationInterval: any;
+
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdParam = urlParams.get("gameId");
@@ -149,7 +175,13 @@
     promptIndex = promptIndexParam ? Number(promptIndexParam) : 0;
     finalMode = finalParam === "true";
 
-    // Get the current user id from session.
+    // Reset ready flags so that this page always starts fresh.
+    await supabase
+      .from("profiles")
+      .update({ ready: false })
+      .eq("game_id", gameId);
+
+    // Get the current user ID.
     const { data: sessionData } = await supabase.auth.getSession();
     userId = sessionData?.session?.user?.id || "";
 
@@ -162,7 +194,7 @@
       players = playersData.sort((a, b) => a.id.localeCompare(b.id));
     }
 
-    // Subscription for game changes (e.g. if current prompt index is updated externally).
+    // Subscribe to game changes (for example, if the prompt index is updated externally).
     gameSubscription = supabase
       .channel("game-changes")
       .on(
@@ -183,50 +215,49 @@
       .subscribe();
 
     if (finalMode) {
+      // Fetch final scores for the final scoreboard.
       finalScores = await fetchAllPlayersScores(gameId);
-      return;
-    }
-
-    // Fetch prompts.
-    const { data: prompts, error: promptErr } = await supabase
-      .from("prompts")
-      .select("id, text, player_id")
-      .eq("game_id", gameId)
-      .order("id", { ascending: true });
-    if (promptErr || !prompts || prompts.length === 0) {
-      errorMessage = "Failed to fetch prompts.";
-      return;
-    }
-    if (promptIndex >= prompts.length) {
-      goto(`/winner?gameId=${gameId}&final=true`);
-      return;
-    }
-    currentPrompt = prompts[promptIndex];
-
-    if (currentPrompt?.player_id) {
-      const { data: authorProfile } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", currentPrompt.player_id)
-        .single();
-      promptAuthorName = authorProfile?.username || "Unknown";
-    }
-
-    const res = await calculatePromptScores(gameId, currentPrompt.id);
-    if (res.error) {
-      errorMessage = res.error;
-      return;
-    }
-    result = res;
-
-    if (result.tie) {
-      responderA = await fetchResponderInfo(result.respA);
-      responderB = await fetchResponderInfo(result.respB);
     } else {
-      responderA = await fetchResponderInfo(result.winner);
-      responderB = await fetchResponderInfo(result.loser);
+      // Fetch prompts.
+      const { data: prompts, error: promptErr } = await supabase
+        .from("prompts")
+        .select("id, text, player_id")
+        .eq("game_id", gameId)
+        .order("id", { ascending: true });
+      if (promptErr || !prompts || prompts.length === 0) {
+        errorMessage = "Failed to fetch prompts.";
+        return;
+      }
+      if (promptIndex >= prompts.length) {
+        // When there are no more prompts, switch to final mode.
+        goto(`/winner?gameId=${gameId}&final=true`);
+        return;
+      }
+      currentPrompt = prompts[promptIndex];
+      if (currentPrompt?.player_id) {
+        const { data: authorProfile } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", currentPrompt.player_id)
+          .single();
+        promptAuthorName = authorProfile?.username || "Unknown";
+      }
+      const res = await calculatePromptScores(gameId, currentPrompt.id);
+      if (res.error) {
+        errorMessage = res.error;
+        return;
+      }
+      result = res;
+      if (result.tie) {
+        responderA = await fetchResponderInfo(result.respA);
+        responderB = await fetchResponderInfo(result.respB);
+      } else {
+        responderA = await fetchResponderInfo(result.winner);
+        responderB = await fetchResponderInfo(result.loser);
+      }
     }
 
+    // **Set up the realtime subscription for ready state changes**
     setupReadySubscription();
 
     decorationInterval = setInterval(() => {
@@ -243,32 +274,12 @@
     }
     clearInterval(decorationInterval);
   });
-
-  async function fetchResponderInfo(respObj) {
-    if (!respObj?.player_id) {
-      return {
-        username: "Unknown",
-        vote_count: respObj?.vote_count || 0,
-        playerIndex: -1,
-      };
-    }
-    const { data: p } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", respObj.player_id)
-      .single();
-    return {
-      username: p?.username || "Unknown",
-      vote_count: respObj.vote_count || 0,
-      playerIndex: players.findIndex((p) => p.id === respObj.player_id),
-    };
-  }
 </script>
 
 {#if finalMode}
   <h1>Final Scoreboard</h1>
   {#if errorMessage}
-    <p style="color: red;">{errorMessage}</p>
+    <p style="color:red;">{errorMessage}</p>
   {/if}
   <div class="scoreboard">
     {#each finalScores as player, i}
@@ -286,6 +297,14 @@
       </div>
     {/each}
   </div>
+  <!-- Final mode ready button -->
+  <button on:click={handleReady} disabled={hasPressedReady}>
+    {#if hasPressedReady}
+      Waiting for others...
+    {:else}
+      Next
+    {/if}
+  </button>
 {:else if currentPrompt}
   <div class="page-container">
     <div class="frame">
@@ -293,9 +312,8 @@
       <h2>"{currentPrompt.text}"</h2>
       <p>Prompt Author: <strong>{promptAuthorName}</strong></p>
       {#if errorMessage}
-        <p style="color: red;">{errorMessage}</p>
+        <p style="color:red;">{errorMessage}</p>
       {/if}
-
       {#if result}
         {#if result.tie}
           <h2>This round's a draw!</h2>
@@ -346,8 +364,7 @@
             <div class="loserName">2nd:<br />{responderB?.username}</div>
           </div>
         {/if}
-        <!-- Next Prompt button: each player presses this which updates their ready flag.
-             Live subscription will trigger nextPrompt() once everyone is ready. -->
+        <!-- Ready button for non-final mode -->
         <button on:click={handleReady} disabled={hasPressedReady}>
           {#if hasPressedReady}
             Waiting for others...
@@ -386,7 +403,6 @@
     max-width: 600px;
     margin: 2rem auto;
   }
-
   .player-entry {
     display: flex;
     align-items: center;
@@ -396,29 +412,24 @@
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
-
   .player-avatar {
     width: 60px;
     height: 60px;
     object-fit: contain;
   }
-
   .player-info {
     display: flex;
     flex-direction: column;
     flex-grow: 1;
   }
-
   .username {
     font-weight: bold;
     font-size: 1.2rem;
   }
-
   .score {
     color: #666;
     font-size: 0.9rem;
   }
-
   .player-rank {
     font-size: 1.5rem;
     font-weight: bold;
@@ -427,11 +438,9 @@
     color: #4a90e2;
   }
   button {
-    padding: 10px 20px;
-    margin-top: 20px;
-    cursor: pointer;
+    position: relative;
+    z-index: 2;
   }
-
   .page-container {
     display: flex;
     flex-direction: column;
@@ -443,11 +452,9 @@
     --frame-scale: 1.2;
     --base-offset: 50px;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     width: 95vw;
     max-width: 1200px;
-    aspect-ratio: 2 / 1;
-    position: relative;
     background-image: url("backgrounds/bg1.png");
     background-size: contain;
     background-repeat: no-repeat;
@@ -458,9 +465,6 @@
     transform: scale(var(--frame-scale));
     margin-bottom: 10px;
     padding: 1rem;
-  }
-  .frame > * {
-    transform: translateY(calc(-1 * var(--base-offset) * var(--frame-scale)));
   }
   .winnerColumn,
   .loserColumn,
@@ -486,6 +490,7 @@
     left: 50%;
     transform: translateX(-50%);
     display: flex;
+    z-index: -1; /* Send decorations behind the button and other elements */
   }
   .decorations img {
     max-width: 150px;

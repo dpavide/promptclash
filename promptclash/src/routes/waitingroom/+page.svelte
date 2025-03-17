@@ -90,7 +90,7 @@
         }
       )
       .subscribe();
-    
+
     await refreshPlayers();
 
     gameChannel = supabase
@@ -110,11 +110,11 @@
         }
       )
       .subscribe();
-    });
+  });
 
-    onDestroy(() => {
-      if (channel) supabase.removeChannel(channel);
-      if (gameChannel) supabase.removeChannel(gameChannel);
+  onDestroy(() => {
+    if (channel) supabase.removeChannel(channel);
+    if (gameChannel) supabase.removeChannel(gameChannel);
   });
 
   async function refreshPlayers() {
@@ -130,7 +130,7 @@
 
     // Filter out players who are not in the game
     players = data ? data.filter((player) => player.in_game) : [];
-    console.log("players in game", players)
+    console.log("players in game", players);
 
     // Sort players by ID for consistent display
     players = players.sort((a, b) => a.id.localeCompare(b.id));
@@ -141,7 +141,6 @@
       goto("/");
     }
   }
-
 
   async function startGame() {
     if (!currentUser.is_host) {
@@ -160,7 +159,6 @@
         .eq("game_id", gameId)
         .eq("in_game", false);
 
-      
       if (deleteError) {
         throw new Error("Failed to delete players not in game.");
       }
@@ -168,7 +166,7 @@
     } catch (error) {
       console.error("Failed to delete players:", error);
       alert("An error occurred while deleting players.");
-      return;  // Exit function if deletion fails
+      return; // Exit function if deletion fails
     }
     try {
       const { count: promptCount, error: countError } = await supabase
@@ -218,16 +216,23 @@
         <div class="left">
           <div class="player-icon">
             <!-- Show the corresponding image for the player’s index -->
-            <img src={playerimages[i % playerimages.length]} alt="Player icon" />
+            <img
+              src={playerimages[i % playerimages.length]}
+              alt="Player icon"
+            />
           </div>
           <div class="player-label">
-            {player.username} {player.is_host ? "👑 (Host)" : ""}
+            {player.username}
+            {player.is_host ? "👑 (Host)" : ""}
           </div>
         </div>
 
         {#if currentUser.is_host && !player.is_host}
-          <button on:click={() => kickPlayer(player.id)} style="margin-left: 10px; background-color: red; color: white; border: none; border-radius: 3px; padding: 2px 5px;">
-          Kick
+          <button
+            on:click={() => kickPlayer(player.id)}
+            style="margin-left: 10px; background-color: red; color: white; border: none; border-radius: 3px; padding: 2px 5px;"
+          >
+            Kick
           </button>
         {/if}
       </div>
@@ -237,7 +242,11 @@
 
 <!-- Start/Play button below all players -->
 {#if currentUser.is_host}
-  <button class="start-button" on:click={startGame} disabled={players.length < 3}>
+  <button
+    class="start-button"
+    on:click={startGame}
+    disabled={players.length < 3}
+  >
     Start Game ({players.length}/3+)
   </button>
 {:else}
