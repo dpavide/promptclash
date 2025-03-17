@@ -13,7 +13,10 @@
       return;
     }
     const censoredUsername = await checkProfanity(username.trim());
-    if (censoredUsername !== username.trim()) {
+    if (censoredUsername !== username.trim().toLowerCase()) {
+      alert(censoredUsername);
+      alert(username);
+      alert(username.trim());
       alert("Inappropriate username, you can't join the lobby.");
       return; // block them from proceeding
     }
@@ -71,7 +74,10 @@
       return;
     }
     const censoredUsername = await checkProfanity(username.trim());
-    if (censoredUsername !== username.trim()) {
+    if (censoredUsername !== username.trim().toLowerCase()) {
+      alert(censoredUsername);
+      alert(username);
+      alert(username.trim());
       alert("Inappropriate username, you can't join the lobby.");
       return; // block them
     }
@@ -175,7 +181,10 @@
         </button>
       </div>
 
-      <small style="font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;">OR</small>
+      <small
+        style="font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;"
+        >OR</small
+      >
 
       <!-- Create Room Button -->
       <button class="play-button" on:click={handleCreateRoom}>
@@ -253,7 +262,8 @@
   }
   .header h1 {
     font-size: 3em;
-    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+    font-family: "Gill Sans", "Gill Sans MT", Calibri, "Trebuchet MS",
+      sans-serif;
     color: white;
     text-shadow: 2px 2px 5px black;
   }

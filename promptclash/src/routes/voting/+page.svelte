@@ -228,7 +228,9 @@
                 <p class="vote-count">Votes: {r.vote_count}</p>
 
                 {#if responderIDs.has(userId)}
-                  <p class="voter-status">(You answered this prompt, so you can't vote)</p>
+                  <p class="voter-status">
+                    (You answered this prompt, so you can't vote)
+                  </p>
                 {:else if r.player_id === userId}
                   <p class="voter-status">(Your own response)</p>
                 {:else if hasVoted}
