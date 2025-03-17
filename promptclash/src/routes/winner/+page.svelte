@@ -268,13 +268,7 @@
     {/each}
   </div>
   <!-- Final mode ready button -->
-  <button on:click={handleReady} disabled={hasPressedReady}>
-    {#if hasPressedReady}
-      Waiting for others...
-    {:else}
-      Next
-    {/if}
-  </button>
+  <a href="/"> Home </a>
 {:else if currentPrompt}
   <div class="page-container">
     <div class="frame">
