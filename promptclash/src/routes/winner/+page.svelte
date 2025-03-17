@@ -7,6 +7,7 @@
   let gameId: number;
   let promptIndex: number = 0;
   let finalMode: boolean = false;
+  let lastPageFlag: boolean = false;
   let finalScores: any[] = [];
   let players: any[] = [];
 
@@ -23,6 +24,7 @@
   // Ready functionality
   let userId = "";
   let hasPressedReady = false;
+  let transitioning = false; // Guard to prevent duplicate triggers
 
   // Player images (adjust paths as needed)
   let playerHeadImages: string[] = [
@@ -61,12 +63,16 @@
     const { data, error } = await supabase
       .from("profiles")
       .select("ready")
-      .eq("game_id", gameId);
+      .eq("game_id", gameId)
+      .eq("ready", true);
+
     if (error || !data) {
       console.error("Error checking ready status:", error);
       return false;
     }
-    return data.every((profile) => profile.ready === true);
+
+    // Corrected condition: use === instead of >=
+    return data.length === players.length;
   }
 
   // Called when a player clicks the ready button.
@@ -93,21 +99,19 @@
     }
   }
 
-  // Setup a realtime subscription on the "profiles" table (for the current game)
-  // similar to how the voting page subscribes to the "votes" table.
+  // Setup a realtime subscription on the "profiles" table for the current game.
   function setupReadySubscription() {
     readySubscription = supabase
       .channel("game-ready")
       .on(
         "postgres_changes",
         {
-          event: "*", // you could also use "UPDATE" if you want to restrict to update events
+          event: "UPDATE",
           schema: "public",
           table: "profiles",
           filter: `game_id=eq.${gameId}`,
         },
-        async (payload) => {
-          // When any profile changes, check if all players are ready.
+        async () => {
           const allReady = await checkAllReady(gameId);
           if (allReady) {
             nextPrompt();
@@ -118,24 +122,35 @@
   }
 
   // Reset ready flags for all players and navigate to the next page.
-  // If finalMode is true, navigate to a dedicated final page.
+  // Update the nextPrompt function to reset ready states properly
   async function nextPrompt() {
-    // Reset everyone’s ready flag.
+    if (transitioning) return;
+    transitioning = true;
+
+    // Unsubscribe first to prevent race conditions
+    if (readySubscription) {
+      supabase.removeChannel(readySubscription);
+      readySubscription = null;
+    }
+
     const { error } = await supabase
       .from("profiles")
       .update({ ready: false })
       .eq("game_id", gameId);
-    if (error) {
-      console.error("Error resetting ready flags:", error);
-    }
-    if (finalMode) {
+
+    if (error) console.error("Error resetting ready:", error);
+
+    if (lastPageFlag) {
+      goto("/");
+    } else if (finalMode) {
+      lastPageFlag = true;
       goto(`/final?gameId=${gameId}`);
     } else {
+      lastPageFlag = false;
       const newIndex = promptIndex + 1;
       goto(`/voting?gameId=${gameId}&promptIndex=${newIndex}`);
     }
   }
-
   // Helper: Fetch responder info based on calculated results.
   async function fetchResponderInfo(respObj) {
     if (!respObj?.player_id) {
@@ -185,16 +200,16 @@
     const { data: sessionData } = await supabase.auth.getSession();
     userId = sessionData?.session?.user?.id || "";
 
-    // Fetch and sort players.
+    // Fetch players after resetting ready states (including their username)
     const { data: playersData, error: playersError } = await supabase
       .from("profiles")
-      .select("id")
+      .select("id, username")
       .eq("game_id", gameId);
     if (!playersError && playersData) {
       players = playersData.sort((a, b) => a.id.localeCompare(b.id));
     }
 
-    // Subscribe to game changes (for example, if the prompt index is updated externally).
+    // Subscribe to game changes (if the prompt index is updated externally).
     gameSubscription = supabase
       .channel("game-changes")
       .on(
@@ -257,7 +272,7 @@
       }
     }
 
-    // **Set up the realtime subscription for ready state changes**
+    // Set up the realtime subscription for ready state changes.
     setupReadySubscription();
 
     decorationInterval = setInterval(() => {

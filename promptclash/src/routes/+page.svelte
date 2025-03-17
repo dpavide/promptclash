@@ -14,9 +14,6 @@
     }
     const censoredUsername = await checkProfanity(username.trim());
     if (censoredUsername !== username.trim().toLowerCase()) {
-      alert(censoredUsername);
-      alert(username);
-      alert(username.trim());
       alert("Inappropriate username, you can't join the lobby.");
       return; // block them from proceeding
     }
@@ -75,9 +72,6 @@
     }
     const censoredUsername = await checkProfanity(username.trim());
     if (censoredUsername !== username.trim().toLowerCase()) {
-      alert(censoredUsername);
-      alert(username);
-      alert(username.trim());
       alert("Inappropriate username, you can't join the lobby.");
       return; // block them
     }
@@ -220,16 +214,16 @@
     <img src="backgrounds/rules.png" alt="Game Rules" class="rules-image" />
   </div>
   <div class="text-at-bottom">
-    <a href="/tos" class="terms-link">
-      Read Terms of Service
-    </a>
+    <a href="/tos" class="terms-link"> Read Terms of Service </a>
     <p>
-      DISCLAIMER:  The owners of this website are not responsible for any user-generated content,
-      including but not limited to drawings, messages, and usernames.
+      DISCLAIMER: The owners of this website are not responsible for any
+      user-generated content, including but not limited to drawings, messages,
+      and usernames.
     </p>
     <p>
-      While inappropriate language is subject to filtering and users may be removed for violations,
-      we cannot guarantee the complete elimination of all inappropriate content.
+      While inappropriate language is subject to filtering and users may be
+      removed for violations, we cannot guarantee the complete elimination of
+      all inappropriate content.
     </p>
   </div>
 </div>
