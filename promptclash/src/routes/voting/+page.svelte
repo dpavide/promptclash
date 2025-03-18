@@ -26,6 +26,7 @@
   let playersCount = 0;
   let hasVoted = false;
   let votesSubscription: any = null;
+  let votesSubmitted = 0;
 
   async function fetchPlayerCount() {
     const { data, error } = await supabase
@@ -134,6 +135,8 @@
       ...r,
       vote_count: counts[r.id] || 0,
     }));
+
+    votesSubmitted = responses.reduce((acc, r) => acc + r.vote_count, 0);
   }
 
   async function handleVote(responseId: number, responsePlayerId: string) {
@@ -256,7 +259,19 @@
       {/if}
     </div>
   </div>
+  <div class="blank-voters">
+    {#each Array(playersWhoCanVote) as _, index}
+      <img
+        src={index < votesSubmitted 
+             ? "gameCharacters/playerBlankHand.png" 
+             : "gameCharacters/playerBlankIdle.png"}
+        alt="Voter status"
+        class="blank-voter"
+      />
+    {/each}
+  </div>
 </div>
+
 
 <style>
   :global(body) {
@@ -402,5 +417,22 @@
     text-align: center;
     font-weight: bold;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  .blank-voters {
+    position: fixed; /* Changed from absolute to fixed */
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 20px;
+    padding: 10px 0;
+    z-index: 999; /* Ensure it stays on top */
+    pointer-events: none; /* Allow clicks through empty spaces */
+  }
+
+  .blank-voter {
+    width: 120px; /* Match winner page hand image size */
+    height: auto;
+    /* Removed all borders and shadows */
   }
 </style>

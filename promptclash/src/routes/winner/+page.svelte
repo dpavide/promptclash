@@ -293,7 +293,11 @@
     {/each}
   </div>
   <!-- Final mode ready button -->
-  <a href="/"> Home </a>
+  <div style="text-align: center; width: 100%;">
+    <a href="/" class="vote-button" style="margin-top: 2rem;">
+      Home
+    </a>
+  </div>
 {:else if currentPrompt}
   <div class="page-container">
     <div class="frame">
@@ -521,5 +525,29 @@
     100% {
       background-image: url("backgrounds/bg1.png");
     }
+  }
+  .vote-button {
+    /* Existing button styles */
+    background-color: #0056b3;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1.1rem;
+    
+    /* Add these for anchor elements */
+    display: inline-block;
+    text-decoration: none;
+    text-align: center;
+    line-height: normal;
+  }
+
+  /* Add specific anchor button hover state */
+  a.vote-button:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+    text-decoration: none;
   }
 </style>
