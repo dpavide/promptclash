@@ -56,6 +56,16 @@
     "gameCharacters/PlayerPurpleIdle.png",
     "gameCharacters/PlayerPinkIdle.png",
   ];
+  let playerHandImages: string[] = [
+    "gameCharacters/playerRedHand.png",
+    "gameCharacters/playerOrangeHand.png",
+    "gameCharacters/playerYellowHand.png",
+    "gameCharacters/playerLightGreenHand.png",
+    "gameCharacters/playerDarkGreenHand.png",
+    "gameCharacters/playerBlueHand.png",
+    "gameharacters/playerPurpleHand.png",
+    "gamecharacters/playerPinkHand.png",
+  ]
 
   // Fetch players so we know how many there are.
   async function fetchPlayers() {
@@ -149,14 +159,22 @@
       alert("You have already pressed ready!");
       return;
     }
+    playerReadiness = {
+      ...playerReadiness,
+      [userId]: true
+    };
+    
     const { error } = await supabase
       .from("profiles")
       .update({ ready: true })
       .eq("id", userId)
       .eq("game_id", gameId);
+      
     if (error) {
       errorMessage = "Failed to update ready status.";
       console.error("Error updating ready status:", error);
+      // Rollback local state if error
+      delete playerReadiness[userId];
       return;
     }
     hasPressedReady = true;
@@ -174,11 +192,16 @@
           table: "profiles",
           filter: `game_id=eq.${gameId}`,
         },
-        async () => {
+        async (payload) => {
+          // Update local readiness state
+          playerReadiness = {
+            ...playerReadiness,
+            [payload.new.id]: payload.new.ready
+          };
+
           const allReady = await checkAllReady();
           if (allReady && !transitioning) {
             transitioning = true;
-            // Instead of resetting ready flags, we simply navigate.
             if (finalMode) {
               goto(`/final?gameId=${gameId}`);
             } else {
@@ -189,9 +212,10 @@
       )
       .subscribe();
   }
-
+  
   let decorationSet = 0;
   let decorationInterval: any;
+  let playerReadiness: Record<string, boolean> = {};
 
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -221,6 +245,9 @@
     await fetchPlayers();
 
     if (finalMode) {
+      decorationInterval = setInterval(() => {
+        decorationSet = decorationSet === 0 ? 1 : 0;
+      }, 1000);
       // For final mode, fetch the final scores.
       finalScores = await fetchAllPlayersScores(gameId);
     } else {
@@ -230,9 +257,7 @@
     // Set up the realtime subscription to check for ready status.
     setupReadySubscription();
 
-    decorationInterval = setInterval(() => {
-      decorationSet = decorationSet === 0 ? 1 : 0;
-    }, 1000);
+    playerReadiness = Object.fromEntries(players.map(p => [p.id, false]));
   });
 
   onDestroy(() => {
@@ -242,7 +267,7 @@
     if (gameSubscription) {
       supabase.removeChannel(gameSubscription);
     }
-    clearInterval(decorationInterval);
+    if (decorationInterval) clearInterval(decorationInterval);  
   });
 </script>
 
@@ -345,14 +370,28 @@
   <p>Loading prompt info...</p>
 {/if}
 
-<div class="decorations">
-  {#each players as _, i}
-    <img
-      src={decorationSet === 0 ? playerIdleImages[i] : playerWriteImages[i]}
-      alt="Player decoration"
-    />
-  {/each}
-</div>
+{#if finalMode}
+  <!-- Final Scoreboard Content -->
+  <div class="decorations">
+    {#each players as _, i}
+      <img
+        src={decorationSet === 0 ? playerIdleImages[i] : playerWriteImages[i]}
+        alt="Player decoration"
+      />
+    {/each}
+  </div>
+{:else}
+  <!-- Round Winner Content -->
+  <div class="decorations">
+    {#each players as player, i}
+      <img
+        src={playerReadiness[player.id] ? playerHandImages[i] : playerIdleImages[i]}
+        alt="Player status"
+        class="player-status"
+      />
+    {/each}
+  </div>
+{/if}
 
 <style>
   h1,
@@ -453,8 +492,18 @@
     left: 50%;
     transform: translateX(-50%);
     display: flex;
+    gap: 20 px;
     z-index: -1;
   }
+  .player-status {
+    width: 120px;
+    height: auto;
+    transition: transform 0.3s ease;
+  }
+  .player-status:hover {
+    transform: translateY(-10px);
+  }
+
   .decorations img {
     max-width: 150px;
     height: auto;
