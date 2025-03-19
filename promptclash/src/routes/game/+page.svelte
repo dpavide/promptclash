@@ -8,6 +8,7 @@
     fetchGamePrompts,
     submitResponse,
   } from "$lib/api";
+  import { error } from "@sveltejs/kit";
 
   // We'll define five stages:
   // 1) "prompt"
@@ -79,10 +80,53 @@
   ];
 
   let canvas: HTMLCanvasElement;
-  let ctx: CanvasRenderingContext2D;
+  let ctx: CanvasRenderingContext2D | null;
   let isDrawing: boolean = false;
   let color: string = "#000000";
   let lineWidth: number = 5;
+  let canvasInitialised = false;
+  let resizeObserver: ResizeObserver;
+
+  $: stage, (errorMessage = "");
+  $: if (canvas && stage) {
+    ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      if (!canvasInitialised) {
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        canvasInitialised = true;
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+    }
+  }
+
+  function initialiseCanvas() {
+    if (canvas) {
+      ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+      }
+    }
+  }
+  async function checkForDrawingContent(): Promise<boolean> {
+    if (!canvas) return false;
+    const blankCanvas = document.createElement("canvas");
+    blankCanvas.width = canvas.width;
+    blankCanvas.height = canvas.height;
+    const blankCtx = blankCanvas.getContext("2d");
+    if (blankCtx) {
+      blankCtx.fillStyle = "white";
+      blankCtx.fillRect(0, 0, blankCanvas.width, blankCanvas.height);
+      return canvas.toDataURL() !== blankCanvas.toDataURL();
+    }
+    return false;
+  }
 
   async function checkProfanity(text: string): Promise<boolean> {
     try {
@@ -114,7 +158,7 @@
   // Function to start the timer for a given stage.
   function startTimer() {
     clearInterval(timerId); // Clear any existing timer
-    timeLeft = 60;          //  Reset timer to 60 seconds
+    timeLeft = 60; //  Reset timer to 60 seconds
     timerId = setInterval(() => {
       timeLeft--;
       //  When time is running low, the UI will flash red (see getTimerStyle below)
@@ -157,9 +201,16 @@
       if (!responseInput.trim()) {
         responseInput = "{no response given}";
       }
-      await handleSubmitResponse();
+      await handleSubmitTextResponse();
     }
     // No auto-action for waiting stages.
+  }
+
+  async function getImageUrl(userId: string): Promise<string> {
+    const { data } = await supabase.storage
+      .from("canvas_images")
+      .getPublicUrl(`${userId}.png`);
+    return data.publicUrl;
   }
 
   let players: {
@@ -249,22 +300,26 @@
       // all have prompts => assign 2 prompts for each user
       await assignPromptsForCurrentUser();
       stage = "response1";
-      successMessage = "All players have submitted prompts! Please answer your first assigned prompt.";
-        startTimer();
+      successMessage =
+        "All players have submitted prompts! Please answer your first assigned prompt.";
+      startTimer();
     }
   }
 
   // Submit the user's prompt or default
   async function handleSubmitPrompt(useDefault: boolean) {
-    stopTimer(); 
+    stopTimer();
     errorMessage = "";
+
     if (!userId) {
       errorMessage = "No user is signed in.";
       return;
     }
     const typedPrompt = useDefault ? "" : promptInput.trim();
     try {
-      const promptToSubmit = useDefault ? "" : await checkProfanity(typedPrompt);
+      const promptToSubmit = useDefault
+        ? ""
+        : await checkProfanity(typedPrompt);
       await submitPlayerPrompt(gameId, userId, promptToSubmit);
       const { error } = await supabase
         .from("profiles")
@@ -325,8 +380,10 @@
     }
   }
 
-  async function handleSubmitResponse() {
-    stopTimer(); 
+  async function handleSubmitTextResponse() {
+    stopTimer();
+    errorMessage = "";
+
     if (!assignedPrompts || assignedPrompts.length === 0) {
       errorMessage = "No assigned prompts found.";
       return;
@@ -335,8 +392,10 @@
       errorMessage = "No user is signed in.";
       return;
     }
+
+    // Text-specific validation
     if (!responseInput.trim()) {
-      errorMessage = "Response cannot be empty.";
+      errorMessage = "Text response cannot be empty.";
       return;
     }
 
@@ -359,7 +418,8 @@
       if (responseIndex === 0 && assignedPrompts.length > 1) {
         responseIndex = 1;
         stage = "response2";
-        successMessage = "Ok you answered that first prompt. Now answer another one!";
+        successMessage =
+          "Ok you answered that first prompt. Now answer another one!";
         startTimer();
       } else {
         stage = "waitingResponse";
@@ -370,42 +430,108 @@
           .eq("id", userId);
       }
     } catch (err) {
-      console.error("Error submitting response:", err);
-      errorMessage = "Failed to submit response. Please try again.";
+      console.error("Error submitting text response:", err);
+      errorMessage = "Failed to submit text response. Please try again.";
     }
   }
 
-  async function submitResponseForDrawing(img: string) {
+  async function handleSubmitDrawingResponse() {
+    stopTimer();
+    errorMessage = "";
+    const hasDrawing = await checkForDrawingContent();
+
+    if (!assignedPrompts || assignedPrompts.length === 0) {
+      errorMessage = "No assigned prompts found.";
+      return;
+    }
+    if (!userId) {
+      errorMessage = "No user is signed in.";
+      return;
+    }
+    if (!hasDrawing) {
+      errorMessage = "Drawing cannot be empty";
+      return;
+    }
+
+    const targetPrompt = assignedPrompts[responseIndex];
+    if (!targetPrompt) {
+      errorMessage = "Could not find the assigned prompt to answer.";
+      return;
+    }
+
     try {
-      const { data: user, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        console.error("No user is signed in:", userError);
-        return;
+      // Convert canvas to PNG
+      const canvasImage = canvas.toDataURL("image/png");
+      const fileBlob = dataURLtoBlob(canvasImage);
+
+      // Generate unique filename
+      const fileName = `${userId}-${targetPrompt.id}.png`;
+
+      // Upload to Supabase storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("canvas-images")
+        .upload(fileName, fileBlob, {
+          upsert: true,
+          contentType: "image/png",
+        });
+
+      if (uploadError) {
+        console.error("Upload error details:", uploadError);
+        throw uploadError;
       }
-      const userId = user.user.id;
 
-      const { error: insertError } = await supabase.from("responses").insert([
-        {
-          game_id: gameId,
-          player_id: userId,
-          drawing: img,
-        },
-      ]);
+      // Get public URL from upload response
+      const imageUrl = uploadData?.path
+        ? supabase.storage.from("canvas-images").getPublicUrl(uploadData.path)
+            .data.publicUrl
+        : null;
 
-      if (insertError) {
-        console.error("Error submitting drawing:", insertError);
+      if (!imageUrl) throw new Error("Failed to get image URL");
+
+      // Submit response with image URL
+      await submitResponse(gameId, userId, targetPrompt.id, imageUrl);
+
+      // Clear and progress
+      responseInput = "";
+      errorMessage = "";
+
+      if (responseIndex === 0 && assignedPrompts.length > 1) {
+        responseIndex = 1;
+        stage = "response2";
+        successMessage =
+          "Ok you answered that first prompt. Now answer another one!";
+        startTimer();
       } else {
-        response = "";
-        goto(`/voting?gameId=${gameId}`);
+        stage = "waitingResponse";
+        successMessage = "You answered both prompts. Waiting for others...";
+        await supabase
+          .from("profiles")
+          .update({ submitted_response: true })
+          .eq("id", userId);
       }
-    } catch (error) {
-      console.error("Error in submitResponseForDrawing:", error);
+    } catch (err) {
+      console.error("Error submitting drawing:", err);
+      errorMessage =
+        "Failed to submit drawing. Please check console for details.";
     }
   }
 
+  // Helper function to convert data URL to Blob
+  function dataURLtoBlob(dataURL: string) {
+    const arr = dataURL.split(",");
+    const mime = arr[0].match(/:(.*?);/)![1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  }
   function startDrawing(event: MouseEvent) {
-    if (!ctx) return;
+    if (!ctx || !canvas) return;
     isDrawing = true;
+    ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
     const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
@@ -414,10 +540,12 @@
   }
 
   function draw(event: MouseEvent) {
-    if (!isDrawing || !ctx) return;
+    if (!isDrawing || !ctx || !canvas) return;
+    ctx.restore();
     const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
     ctx.lineTo(event.clientX - rect.left, event.clientY - rect.top);
     ctx.stroke();
+    ctx.save();
   }
 
   function stopDrawing() {
@@ -425,14 +553,37 @@
   }
 
   function clearCanvas() {
-    if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (ctx && canvas) {
+      ctx.fillStyle = "white";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  function handleMouseDown(event: MouseEvent) {
+    if (!ctx) return;
+    isDrawing = true;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
+    ctx.beginPath();
+    ctx.moveTo(event.clientX - rect.left, event.clientY - rect.top);
+  }
+  function handleMouseMove(event: MouseEvent) {
+    if (!isDrawing || !ctx) return;
+    const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
+    ctx.lineTo(event.clientX - rect.left, event.clientY - rect.top);
+    ctx.stroke();
+  }
+  function handleMouseUp(event: MouseEvent) {
+    isDrawing = false;
+  }
+  function handleMouseLeave(event: MouseEvent) {
+    isDrawing = false;
   }
 
   function submitDrawing() {
     if (!ctx || !canvas) return;
-    const canvasImage = canvas.toDataURL("image/png");
-    submitResponseForDrawing(canvasImage);
-    console.log("Drawing saved to database:", canvasImage);
+    handleSubmitDrawingResponse();
   }
 
   async function fetchPlayersAndSubscribe() {
@@ -518,20 +669,16 @@
     await checkIfAllSubmittedPrompts();
     await checkIfAllSubmittedResponses();
 
-    // Canvas init
-    await tick();
-    let tries = 10;
-    while (!canvas && tries > 0) {
-      console.log("Waiting for canvas...");
-      await new Promise((r) => setTimeout(r, 100));
-      tries--;
-    }
-    if (canvas) {
-      ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    resizeObserver = new ResizeObserver((entries) => {
+      if (canvas) {
+        // Maintain 1:1 pixel ratio
+        canvas.width = 420;
+        canvas.height = 200;
       }
+    });
+
+    if (canvas) {
+      resizeObserver.observe(canvas);
     }
 
     if (stage === "prompt" || stage === "response1" || stage === "response2") {
@@ -550,6 +697,9 @@
   onDestroy(() => {
     if (unsubscribeCount && typeof unsubscribeCount === "function") {
       unsubscribeCount();
+    }
+    if (resizeObserver) {
+      resizeObserver.disconnect();
     }
   });
 
@@ -624,9 +774,6 @@
         {#if errorMessage}
           <p class="error">{errorMessage}</p>
         {/if}
-        <!-- {#if successMessage}
-        <p class="success">{successMessage}</p>
-      {/if} -->
 
         {#if stage === "prompt"}
           <div class="prompt-container">
@@ -644,7 +791,7 @@
                 Use Default Prompt
               </button>
             </div>
-            <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
+            <p style={getTimerStyle()}>Time left: {timeLeft}s</p>
           </div>
         {:else if stage === "waitingPrompt"}
           <div class="prompt-container">
@@ -662,36 +809,46 @@
                     bind:value={responseInput}
                     placeholder="Type your response for prompt #1..."
                   ></textarea>
+                  <!-- MOVED SUBMIT BUTTON HERE -->
+                  <div class="text-submit-wrapper">
+                    <button on:click={handleSubmitTextResponse}
+                      >Submit Text Response</button
+                    >
+                    <p style={getTimerStyle()}>Time left: {timeLeft}s</p>
+                  </div>
                 </div>
-                <!-- Drawing area commented out for now
-              <div class="drawing-area">
-                <p>Or draw your response:</p>
-                <canvas
-                  bind:this={canvas}
-                  width="420"
-                  height="200"
-                  on:mousedown={startDrawing}
-                  on:mousemove={draw}
-                  on:mouseup={stopDrawing}
-                  on:mouseleave={stopDrawing}
-                ></canvas>
-                <div class="controls">
-                  <label>
-                    Color: <input type="color" bind:value={color} />
-                  </label>
-                  <label>
-                    Size:
-                    <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
-                    {lineWidth}px
-                  </label>
-                  <button on:click={clearCanvas}>Clear</button>
-                  <button on:click={submitDrawing}>Submit Drawing</button>
+                <div class="drawing-area">
+                  <p>Or draw your response:</p>
+                  <canvas
+                    data-key={stage}
+                    bind:this={canvas}
+                    width="420"
+                    height="200"
+                    on:mousedown={handleMouseDown}
+                    on:mousemove={handleMouseMove}
+                    on:mouseup={handleMouseUp}
+                    on:mouseleave={handleMouseLeave}
+                  ></canvas>
+                  <div class="controls">
+                    <label>
+                      Color: <input type="color" bind:value={color} />
+                    </label>
+                    <label>
+                      Size:
+                      <input
+                        type="range"
+                        min="1"
+                        max="20"
+                        step="1"
+                        bind:value={lineWidth}
+                      />
+                      {lineWidth}px
+                    </label>
+                    <button on:click={clearCanvas}>Clear</button>
+                    <button on:click={submitDrawing}>Submit Drawing</button>
+                  </div>
                 </div>
               </div>
-              -->
-              </div>
-              <button on:click={handleSubmitResponse}>Submit Response</button>
-              <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
             </div>
           {:else}
             <p>Loading assigned prompts...</p>
@@ -707,36 +864,46 @@
                     bind:value={responseInput}
                     placeholder="Type your response..."
                   ></textarea>
+                  <!-- MOVED SUBMIT BUTTON HERE -->
+                  <div class="text-submit-wrapper">
+                    <button on:click={handleSubmitTextResponse}
+                      >Submit Text Response</button
+                    >
+                    <p style={getTimerStyle()}>Time left: {timeLeft}s</p>
+                  </div>
                 </div>
-                <!-- Drawing area commented out for now
-              <div class="drawing-area">
-                <p>Or draw your response:</p>
-                <canvas
-                  bind:this={canvas}
-                  width="420"
-                  height="200"
-                  on:mousedown={startDrawing}
-                  on:mousemove={draw}
-                  on:mouseup={stopDrawing}
-                  on:mouseleave={stopDrawing}
-                ></canvas>
-                <div class="controls">
-                  <label>
-                    Color: <input type="color" bind:value={color} />
-                  </label>
-                  <label>
-                    Size:
-                    <input type="range" min="1" max="20" step="1" bind:value={lineWidth} />
-                    {lineWidth}px
-                  </label>
-                  <button on:click={clearCanvas}>Clear</button>
-                  <button on:click={submitDrawing}>Submit Drawing</button>
+                <div class="drawing-area">
+                  <p>Or draw your response:</p>
+                  <canvas
+                    data-key={stage}
+                    bind:this={canvas}
+                    width="420"
+                    height="200"
+                    on:mousedown={handleMouseDown}
+                    on:mousemove={handleMouseMove}
+                    on:mouseup={handleMouseUp}
+                    on:mouseleave={handleMouseLeave}
+                  ></canvas>
+                  <div class="controls">
+                    <label>
+                      Color: <input type="color" bind:value={color} />
+                    </label>
+                    <label>
+                      Size:
+                      <input
+                        type="range"
+                        min="1"
+                        max="20"
+                        step="1"
+                        bind:value={lineWidth}
+                      />
+                      {lineWidth}px
+                    </label>
+                    <button on:click={clearCanvas}>Clear</button>
+                    <button on:click={submitDrawing}>Submit Drawing</button>
+                  </div>
                 </div>
               </div>
-              -->
-              </div>
-              <button on:click={handleSubmitResponse}>Submit Response</button>
-              <p style="{getTimerStyle()}">Time left: {timeLeft}s</p>
             </div>
           {:else}
             <p>Loading second prompt...</p>
@@ -773,13 +940,12 @@
     background-color: #078fd8;
   }
 
-  /* NEW: A container for the background + prompt overlay */
   .background-container {
     position: relative;
-    width: 100%; /* Reduced from 80% */
-    max-width: 1600px; /* Reduced from 900px */
-    margin: 10px auto; /* Center the container */
-    aspect-ratio: 1.5; /* Maintain aspect ratio */
+    width: 100%;
+    max-width: 1600px;
+    margin: 10px auto;
+    aspect-ratio: 1.5;
   }
 
   .animated-background {
@@ -812,8 +978,8 @@
     top: 40%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 100%; /* Increased width for better content fit */
-    max-width: 400px; /* Adjusted for smaller container */
+    width: 90%;
+    max-width: 800px;
     z-index: 2;
   }
 
@@ -826,18 +992,25 @@
   }
 
   .response-area {
-    display: flex;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
     width: 100%;
+    min-width: 700px;
+    align-items: start;
   }
 
   .text-area-wrapper {
-    flex: 1;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
   }
 
   .text-area-wrapper textarea {
     width: 100%;
-    height: 150px;
+    height: 200px;
+    min-height: 200px;
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 8px;
@@ -845,53 +1018,58 @@
     box-sizing: border-box;
   }
 
-  .drawing-area {
-    flex: 1;
-    resize: both;
-    overflow: auto;
-    min-width: 300px;
-    min-height: 200px;
-    border: 2px solid black;
-    padding: 5px;
-    box-sizing: border-box;
-  }
-
-  .drawing-area canvas {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-
-  .controls {
+  .text-submit-wrapper {
     margin-top: 10px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
+    text-align: left;
   }
 
-  textarea {
-    /* Fallback textarea styles for other areas if needed */
-    width: 95%;
-    height: 50px;
-    margin: 10px 0;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    resize: none;
-    box-sizing: border-box;
-  }
-
-  button {
-    padding: 10px 15px;
+  .text-submit-wrapper button {
+    display: inline-block;
+    margin: 0;
+    padding: 10px 20px;
+    font-size: 1rem;
     background-color: #0077cc;
     color: white;
     border: none;
     border-radius: 8px;
     cursor: pointer;
   }
-  button:hover {
+
+  .text-submit-wrapper button:hover {
     background-color: #005fa3;
+  }
+
+  .drawing-area {
+    margin-left: 20px;
+    width: 100%;
+    height: auto;
+    min-height: 250px;
+    background: white;
+    border: 2px solid #000;
+    padding: 10px;
+    position: relative;
+  }
+
+  .drawing-area canvas {
+    width: 100%;
+    height: 200px;
+    cursor: crosshair;
+    display: block;
+    margin-bottom: 15px;
+  }
+
+  .controls {
+    position: relative;
+    z-index: 2;
+    margin-top: 15px;
+    gap: 12px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .players {
@@ -924,8 +1102,14 @@
   }
 
   @keyframes flash {
-    0% { opacity: 1; }
-    50% { opacity: 0.3; }
-    100% { opacity: 1; }
+    0% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+    100% {
+      opacity: 1;
+    }
   }
 </style>

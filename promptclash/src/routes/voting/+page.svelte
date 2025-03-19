@@ -26,7 +26,6 @@
   let playersCount = 0;
   let hasVoted = false;
   let votesSubscription: any = null;
-  let votesSubmitted = 0;
 
   async function fetchPlayerCount() {
     const { data, error } = await supabase
@@ -135,8 +134,6 @@
       ...r,
       vote_count: counts[r.id] || 0,
     }));
-
-    votesSubmitted = responses.reduce((acc, r) => acc + r.vote_count, 0);
   }
 
   async function handleVote(responseId: number, responsePlayerId: string) {
@@ -178,7 +175,12 @@
       errorMessage = "Failed to submit vote.";
     }
   }
-
+  function isImageResponse(text: string): boolean {
+    return (
+      text?.startsWith("https://") &&
+      text?.includes("/storage/v1/object/public/canvas-images/")
+    );
+  }
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const gameIdParam = urlParams.get("gameId");
@@ -227,7 +229,18 @@
           <div class="responses-container">
             {#each responses as r (r.id)}
               <div class="response-card">
-                <p class="response-text">{r.text}</p>
+                {#if isImageResponse(r.text)}
+                  <div class="image-container">
+                    <img
+                      src={r.text}
+                      alt="Player submission"
+                      class="submitted-image"
+                      on:error={(e) => (e.target.style.display = "none")}
+                    />
+                  </div>
+                {:else}
+                  <p class="response-text">{r.text}</p>
+                {/if}
                 <p class="vote-count">Votes: {r.vote_count}</p>
 
                 {#if responderIDs.has(userId)}
@@ -259,19 +272,7 @@
       {/if}
     </div>
   </div>
-  <div class="blank-voters">
-    {#each Array(playersWhoCanVote) as _, index}
-      <img
-        src={index < votesSubmitted 
-             ? "gameCharacters/playerBlankHand.png" 
-             : "gameCharacters/playerBlankIdle.png"}
-        alt="Voter status"
-        class="blank-voter"
-      />
-    {/each}
-  </div>
 </div>
-
 
 <style>
   :global(body) {
@@ -304,6 +305,22 @@
     background-repeat: no-repeat;
     background-position: center;
     animation: bgAnimation 1s infinite ease-in-out;
+  }
+  .image-container {
+    width: 100%;
+    height: 250px;
+    margin-bottom: 1rem;
+    background: #f0f0f0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 2px solid #ddd;
+  }
+
+  .submitted-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
   }
 
   .prompt-wrapper {
@@ -361,6 +378,9 @@
     color: #2c3e50;
     font-size: 1.1rem;
     margin-bottom: 1rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 3rem;
   }
 
   .vote-count {
@@ -417,22 +437,5 @@
     text-align: center;
     font-weight: bold;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
-  }
-  .blank-voters {
-    position: fixed; /* Changed from absolute to fixed */
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 20px;
-    padding: 10px 0;
-    z-index: 999; /* Ensure it stays on top */
-    pointer-events: none; /* Allow clicks through empty spaces */
-  }
-
-  .blank-voter {
-    width: 120px; /* Match winner page hand image size */
-    height: auto;
-    /* Removed all borders and shadows */
   }
 </style>
