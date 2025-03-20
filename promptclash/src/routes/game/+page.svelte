@@ -784,10 +784,10 @@
               placeholder="Type something..."
             />
             <div class="button-group" style="margin-top: 1rem;">
-              <button on:click={() => handleSubmitPrompt(false)}>
+              <button on:click={() => handleSubmitPrompt(false)}  style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
                 Submit Prompt
               </button>
-              <button on:click={() => handleSubmitPrompt(true)}>
+              <button on:click={() => handleSubmitPrompt(true)}  style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
                 Use Default Prompt
               </button>
             </div>
@@ -811,7 +811,7 @@
                   ></textarea>
                   <!-- MOVED SUBMIT BUTTON HERE -->
                   <div class="text-submit-wrapper">
-                    <button on:click={handleSubmitTextResponse}
+                    <button on:click={handleSubmitTextResponse} style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
                       >Submit Text Response</button
                     >
                     <p style={getTimerStyle()}>Time left: {timeLeft}s</p>
@@ -844,8 +844,12 @@
                       />
                       {lineWidth}px
                     </label>
-                    <button on:click={clearCanvas}>Clear</button>
-                    <button on:click={submitDrawing}>Submit Drawing</button>
+                    <button on:click={clearCanvas}  style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+                      Clear
+                    </button>
+                    <button on:click={submitDrawing} style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+                      Submit Drawing
+                    </button>
                   </div>
                 </div>
               </div>
