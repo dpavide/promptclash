@@ -269,6 +269,8 @@
     }
     if (decorationInterval) clearInterval(decorationInterval);  
   });
+
+  $: playerColorIndexes = new Map(players.map((p, i) => [p.id, i % 8]));
 </script>
 
 {#if finalMode}
@@ -626,3 +628,4 @@
     text-decoration: none;
   }
 </style>
+
