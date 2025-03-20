@@ -206,7 +206,7 @@
 <h1>WAITING FOR PLAYERS TO JOIN</h1>
 
 {#if currentGame}
-  <p class="game-id">Game ID: {currentGame.id}</p>
+  <span class="game-id">Game ID: {currentGame.id}</span>
 {/if}
 
 <!-- If no players have joined yet, show a waiting message -->
@@ -251,7 +251,9 @@
     on:click={startGame}
     disabled={players.length < 3 || players.length >= 9}
   >
-    Start Game ({players.length}/3+)
+    {players.length >= 8
+      ? "Start Game, Room Full!"
+      : `Start Game (${players.length}/3+)`}
   </button>
 {:else}
   <p>Waiting for the host to start the game...</p>
@@ -279,6 +281,10 @@
   .game-id {
     color: #fff;
     margin-bottom: 1rem;
+    font-size: 1.6rem;
+    padding: 10px;
+    background: rgb(0, 96, 251);
+    border-radius: 10px;
   }
 
   .waiting-text {
