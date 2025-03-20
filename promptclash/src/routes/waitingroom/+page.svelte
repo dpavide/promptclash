@@ -151,6 +151,10 @@
       alert("At least 3 players are required to start the game!");
       return;
     }
+    if (players.length >= 9) {
+      alert("You can't have more than 8 players in a game!");
+      return;
+    }
     // Delete players with in_game = false
     try {
       const { error: deleteError } = await supabase

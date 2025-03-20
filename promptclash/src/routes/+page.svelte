@@ -92,6 +92,23 @@
         return;
       }
 
+      const { count: currentPlayers, error: countError } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("game_id", game.id)
+        .eq("in_game", true);
+
+      if (countError) {
+        console.error("Error checking player count:", countError);
+        alert("Error checking room availability. Please try again.");
+        return;
+      }
+
+      if (currentPlayers >= 8) {
+        alert("This room is already full!");
+        return;
+      }
+
       // Sign in anonymously
       const { data: authData, error: authError } =
         await supabase.auth.signInAnonymously();
