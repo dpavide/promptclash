@@ -1,6 +1,6 @@
 import { assignPromptToGame, initializeDatabase} from '$lib/api';
 
-initializeDatabase();
+// initializeDatabase();
 
 
 export const handle = async ({ event, resolve}) => {

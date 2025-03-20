@@ -491,7 +491,7 @@ export async function calculatePromptScores(gameId, promptId) {
 
   // 5) awarding points
   const difference = Math.abs(countA - countB);
-  const bonusPoints = difference * 100;
+  const bonusPoints = difference * 50;
 
   if (bonusPoints > 0) {
     // fetch winner's current score
