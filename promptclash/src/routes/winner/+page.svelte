@@ -269,6 +269,8 @@
     }
     if (decorationInterval) clearInterval(decorationInterval);  
   });
+
+  $: playerColorIndexes = new Map(players.map((p, i) => [p.id, i % 8]));
 </script>
 
 {#if finalMode}
@@ -276,9 +278,12 @@
   {#if errorMessage}
     <p style="color:red;">{errorMessage}</p>
   {/if}
+
+  <!-- Updated Final Scoreboard -->
   <div class="scoreboard">
     {#each finalScores as player, i}
-      <div class="player-entry">
+      <!-- Assign each player box a color class based on i % 8 -->
+      <div class="player-box color-{playerColorIndexes.get(player.id)}">
         <div class="player-rank">{i + 1}</div>
         <img
           src={playerHeadImages[players.findIndex((p) => p.id === player.id)]}
@@ -298,6 +303,7 @@
       Home
     </a>
   </div>
+
 {:else if currentPrompt}
   <div class="page-container">
     <div class="frame">
@@ -398,10 +404,15 @@
 {/if}
 
 <style>
+  /* Center all H1 and H2 headings */
   h1,
   h2 {
     text-align: center;
   }
+
+  /* -----------------------
+     FINAL SCOREBOARD STYLES
+     ----------------------- */
   .scoreboard {
     display: flex;
     flex-direction: column;
@@ -410,44 +421,92 @@
     max-width: 600px;
     margin: 2rem auto;
   }
-  .player-entry {
+
+  /* Each player box */
+  .player-box {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    border-radius: 8px;
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 10px;
+    color: #fff; /* default text color is white */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
+
+  /* Circular rank indicator on the left */
+  .player-rank {
+    width: 40px;
+    height: 40px;
+    background-color: rgba(255, 255, 255, 0.2); /* Slight transparency */
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    font-size: 1.2rem;
+    font-weight: bold;
+  }
+
+  /* Player avatar next to the rank */
   .player-avatar {
     width: 60px;
     height: 60px;
-    object-fit: contain;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 1rem;
   }
+
+  /* The name & score stack vertically */
   .player-info {
     display: flex;
     flex-direction: column;
-    flex-grow: 1;
   }
+
   .username {
     font-weight: bold;
     font-size: 1.2rem;
   }
+
   .score {
-    color: #666;
     font-size: 0.9rem;
+    opacity: 0.9;
   }
-  .player-rank {
-    font-size: 1.5rem;
-    font-weight: bold;
-    min-width: 40px;
-    text-align: center;
-    color: #4a90e2;
+
+  /* Color classes for each player box */
+  .color-0 {
+    background-color: #ff4b4b; /* Red */
   }
+  .color-1 {
+    background-color: #ffa500; /* Orange */
+  }
+  .color-2 {
+    background-color: #ffeb3b; /* Yellow */
+    color: #000; /* Use black text for contrast */
+  }
+  .color-3 {
+    background-color: #4caf50; /* Green */
+  }
+  .color-4 {
+    background-color: #009688; /* Teal */
+  }
+  .color-5 {
+    background-color: #2196f3; /* Blue */
+  }
+  .color-6 {
+    background-color: #9c27b0; /* Purple */
+  }
+  .color-7 {
+    background-color: #e91e63; /* Pink */
+  }
+
+  /* -----------------------------
+     OTHER EXISTING STYLES BELOW
+     ----------------------------- */
+
   button {
     position: relative;
     z-index: 2;
   }
+
   .page-container {
     display: flex;
     flex-direction: column;
@@ -455,6 +514,7 @@
     justify-content: center;
     height: 100vh;
   }
+
   .frame {
     --frame-scale: 1.2;
     display: flex;
@@ -472,6 +532,7 @@
     margin-bottom: 10px;
     padding: 1rem;
   }
+
   .winnerColumn,
   .loserColumn,
   .tieColumn {
@@ -481,6 +542,7 @@
     align-items: center;
     margin: 1rem;
   }
+
   .winnerImage img,
   .loserImage img,
   .tieImage img {
@@ -490,15 +552,17 @@
     display: block;
     margin: auto;
   }
+
   .decorations {
     position: fixed;
     bottom: 0;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 20 px;
+    gap: 20px;
     z-index: -1;
   }
+
   .player-status {
     width: 120px;
     height: auto;
@@ -512,6 +576,7 @@
     max-width: 150px;
     height: auto;
   }
+
   @keyframes bgAnimation {
     0% {
       background-image: url("backgrounds/bg1.png");
@@ -526,8 +591,8 @@
       background-image: url("backgrounds/bg1.png");
     }
   }
+
   .vote-button {
-    /* Existing button styles */
     background-color: #0056b3;
     color: white;
     border: none;
@@ -536,15 +601,13 @@
     cursor: pointer;
     transition: all 0.2s ease;
     font-size: 1.1rem;
-    
-    /* Add these for anchor elements */
     display: inline-block;
     text-decoration: none;
     text-align: center;
     line-height: normal;
   }
 
-  /* Add specific anchor button hover state */
+  /* Hover state for the anchor button */
   a.vote-button:hover {
     background-color: #0056b3;
     transform: translateY(-1px);
