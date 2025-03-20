@@ -309,7 +309,7 @@
     padding: 10px 20px;
     font-size: 1.2em;
     color: white;
-    background-color: #007bff;
+    background-color: #0056b3;
     border: none;
     border-radius: 5px;
     cursor: pointer;
