@@ -298,81 +298,97 @@
       Home
     </a>
   </div>
-{:else if currentPrompt}
-  <div class="page-container">
-    <div class="frame">
-      <h1>Results for Prompt #{promptIndex + 1}</h1>
-      <h2>"{currentPrompt.text}"</h2>
-      <p>Prompt Author: <strong>{promptAuthorName}</strong></p>
-      {#if errorMessage}
-        <p style="color:red;">{errorMessage}</p>
+  {:else if currentPrompt}
+  <div class="topText">
+    {#if result}
+      {#if result.tie}
+
+        <h1>Prompt #{promptIndex + 1}: This round is a DRAW!</h1>
+        <h2>Prompt Author: <strong>{promptAuthorName}</strong></h2>
+      {:else}
+        <h1>Prompt #{promptIndex + 1}: {responderA?.username} WINS this round!!!</h1>
+        <h2>Prompt Author: <strong>{promptAuthorName}</strong></h2>
       {/if}
+      
+    {/if} 
+  </div>  
+  <div class="page-container">  
+      {#if errorMessage}
+        <p style="color: red;">{errorMessage}</p>
+      {/if}
+
       {#if result}
         {#if result.tie}
-          <h2>This round's a draw!</h2>
-          <div class="tieContainer">
-            <div class="tieColumn">
-              <div class="tiePoints">+{responderA?.vote_count * 100}</div>
-              <div class="tieImage">
-                <img
-                  src={playerHeadImages[responderA?.playerIndex]}
-                  alt="Player"
-                />
-              </div>
-              <div class="tieName">{responderA?.username}</div>
+        <div class="frame">
+          <div class="tieLeftColumn">
+            <div class="tiePoints">+{responderA?.vote_count * 100}</div>
+            <div class="tieImage">
+              <img src={playerHeadImages[responderA?.playerIndex]} alt="Player Image" />
             </div>
-            <div class="tieColumn">
-              <div class="tiePoints">+{responderB?.vote_count * 100}</div>
-              <div class="tieImage">
-                <img
-                  src={playerHeadImages[responderB?.playerIndex]}
-                  alt="Player"
-                />
-              </div>
-              <div class="tieName">{responderB?.username}</div>
-            </div>
+            <div class="tieName">{responderA?.username}</div>
           </div>
-          <p>No bonus points awarded in a tie.</p>
+      
+          <div class="PromptMiddleColumn">
+            <h2>"{currentPrompt.text}"</h2>
+            <p>No bonus points awarded in a tie.</p>
+            <button on:click={handleReady} disabled={hasPressedReady}>
+              {#if hasPressedReady}
+                Waiting for others...
+              {:else}
+                Next Prompt
+              {/if}
+            </button>    
+          </div>
+      
+          <div class="tieRightColumn">
+            <div class="tiePoints">+{responderB?.vote_count * 100}</div>
+            <div class="tieImage">
+              <img src={playerHeadImages[responderB?.playerIndex]} alt="Player Image" />
+            </div>
+            <div class="tieName">{responderB?.username}</div>
+          </div>
+        </div>
+
         {:else}
-          <div class="winnerColumn">
-            <div class="winnerPoints"><br /><br />+{result.bonusPoints}</div>
-            <div class="winnerImage">
-              <img
-                src={playerHeadImages[responderA?.playerIndex]}
-                alt="Winner"
-              />
+          <div class="frame">
+            <div class="winnerColumn">
+              <div class="winnerPoints">+{result.bonusPoints}</div>
+              <div class="winnerImage">
+                <img src={playerHeadImages[responderA?.playerIndex]} alt="Winner Image" />
+              </div>
+              <div class="winnerName">Winner:<br />{responderA?.username}</div>
             </div>
-            <div class="winnerName">Winner:<br />{responderA?.username}</div>
-          </div>
-          <div class="loserColumn">
-            <div class="loserPoints">
-              <br /><br />+{responderB?.vote_count * 100}
+        
+            <div class="PromptMiddleColumn">
+              <h2>"{currentPrompt.text}"</h2>
+              <button on:click={handleReady} disabled={hasPressedReady}>
+                {#if hasPressedReady}
+                  Waiting for others...
+                {:else}
+                  Next Prompt
+                {/if}
+              </button>
+      
             </div>
-            <div class="loserImage">
-              <img
-                src={playerHeadImages[responderB?.playerIndex]}
-                alt="Loser"
-              />
+        
+            <div class="loserColumn">
+              <div class="loserPoints">+{responderB?.vote_count * 100}</div>
+              <div class="loserImage">
+                <img src={playerHeadImages[responderB?.playerIndex]} alt="Loser Image" />
+              </div>
+              <div class="loserName">2nd:<br />{responderB?.username}</div>
             </div>
-            <div class="loserName">2nd:<br />{responderB?.username}</div>
           </div>
         {/if}
-        <!-- Ready button for non-final mode -->
-        <button on:click={handleReady} disabled={hasPressedReady}>
-          {#if hasPressedReady}
-            Waiting for others...
-          {:else}
-            Next Prompt
-          {/if}
-        </button>
       {:else}
         <p>Loading results...</p>
       {/if}
     </div>
-  </div>
+  
 {:else}
   <p>Loading prompt info...</p>
 {/if}
+
 
 {#if finalMode}
   <!-- Final Scoreboard Content -->
@@ -448,19 +464,43 @@
     position: relative;
     z-index: 2;
   }
+
+  .topText{
+    font-size: clamp(8px, 8vw, 20px);
+    text-decoration: underline;
+    transform: translateY(100%);  
+
+  }
+  
+  h1,
+  h2 {
+    text-align: center;
+  }
+ 
+  button {
+    padding: 10px 20px;
+    margin-top: 20px;
+    cursor: pointer;
+  }
+
   .page-container {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    
     height: 100vh;
   }
   .frame {
+    transform: translateY(-10%);
     --frame-scale: 1.2;
+    --base-offset: 50px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     width: 95vw;
-    max-width: 1200px;
+    max-width: 1000px;
+    aspect-ratio: 2 / 1;
+    position: relative;
     background-image: url("backgrounds/bg1.png");
     background-size: contain;
     background-repeat: no-repeat;
@@ -469,23 +509,55 @@
     justify-content: space-around;
     align-items: center;
     transform: scale(var(--frame-scale));
-    margin-bottom: 10px;
+    
     padding: 1rem;
+    margin: 1px; 
   }
+  .frame > * {
+    transform: translateY(calc(-1 * var(--base-offset) * var(--frame-scale)));
+  }
+
+  
+  .PromptMiddleColumn{
+    font-style: italic;
+    font-size: clamp(8px, 3vw, 20px);
+    display: flex;
+    max-width: 300px;
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center; 
+    height: 100vh; 
+    text-align: center; 
+}
+
+
+  
   .winnerColumn,
-  .loserColumn,
-  .tieColumn {
+  .tieLeftColumn{
+    font-size: clamp(20px, 8vw, 30px);
     display: flex;
     flex-direction: column;
     text-align: center;
     align-items: center;
     margin: 1rem;
+    margin-left: 100px;
   }
+  .loserColumn,
+  .tieRightColumn{
+    font-size: clamp(20px, 8vw, 30px);
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+    margin: 1rem;
+    margin-right: 100px;
+  }
+  
   .winnerImage img,
   .loserImage img,
   .tieImage img {
     width: 100%;
-    max-width: 100px;
+    max-width: 130px;
     height: auto;
     display: block;
     margin: auto;
@@ -512,6 +584,9 @@
     max-width: 150px;
     height: auto;
   }
+
+
+
   @keyframes bgAnimation {
     0% {
       background-image: url("backgrounds/bg1.png");
