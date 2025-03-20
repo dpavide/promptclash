@@ -277,6 +277,7 @@
 <style>
   :global(body) {
     margin: 0;
+    overflow-y: hidden;
     padding: 0;
   }
 
@@ -294,7 +295,8 @@
     width: 100%;
     max-width: 1600px;
     margin: 0 auto;
-    aspect-ratio: 1.5;
+    margin-top: -400px;
+    aspect-ratio: 1.0;
   }
 
   .animated-background {
@@ -307,8 +309,8 @@
     animation: bgAnimation 1s infinite ease-in-out;
   }
   .image-container {
-    width: 100%;
-    height: 250px;
+    width: 90%;
+    height: 200px;
     margin-bottom: 1rem;
     background: #f0f0f0;
     border-radius: 8px;
@@ -354,17 +356,25 @@
   .responses-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    padding: 4rem;
-  }
+    gap: 1rem;
+    padding: 8rem;
+    width: 80%; /* Ensure it doesn't overflow */
+    max-width: 90%; /* Adjust based on your design */
+    margin: 0 auto; /* Center it within the parent */
+    
+}
 
   .response-card {
     background: rgba(255, 255, 255, 0.85);
     border-radius: 10px;
-    padding: 1.5rem;
+    padding: 2rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(5px);
+    width: 80%; /* Ensures it adapts within the grid */
+    height: 70%; /* Avoid fixed height if content varies */
+    margin-top: -100px;
   }
+
 
   .prompt-text {
     color: black;
