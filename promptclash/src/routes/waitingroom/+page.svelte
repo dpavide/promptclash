@@ -245,7 +245,7 @@
   <button
     class="start-button"
     on:click={startGame}
-    disabled={players.length < 3}
+    disabled={players.length < 3 || players.length >= 9}
   >
     Start Game ({players.length}/3+)
   </button>
