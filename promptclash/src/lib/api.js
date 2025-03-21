@@ -442,15 +442,25 @@ export async function calculatePromptScores(gameId, promptId) {
   const basePointsA = countA * 100;
   const basePointsB = countB * 100;
   const bonusPoints = 50;
+  let winnerPoints = 0;
+  let looserPoints = 0;
+  console.log("basePointsA:", basePointsA, "basePointsB:",basePointsB)
 
-  // Update scores
-  await updatePlayerScore(winningResp.player_id, basePointsA + bonusPoints);
-  await updatePlayerScore(losingResp.player_id, basePointsB);
+  if (basePointsA > basePointsB) {
+    winnerPoints = basePointsA + bonusPoints;
+    looserPoints = basePointsB;
+  } else {
+    winnerPoints = basePointsB + bonusPoints;
+    looserPoints = basePointsA;
+  }
+  await updatePlayerScore(winningResp.player_id, winnerPoints);  // Add bonus to winner
+  await updatePlayerScore(losingResp.player_id, looserPoints);                // Loser gets only vote points
+
 
   return {
     tie: false,
-    winner: { ...winningResp, points: basePointsA + bonusPoints },
-    loser: { ...losingResp, points: basePointsB },
+    winner: { ...winningResp, points: winnerPoints },
+    loser: { ...losingResp, points: looserPoints },
     bonusPoints: bonusPoints
   };
 }

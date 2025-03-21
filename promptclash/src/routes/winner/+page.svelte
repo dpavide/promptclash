@@ -17,6 +17,8 @@
   let result: any = null;
 
   let promptAuthorName = "";
+  let tempA: any = null;
+  let tempB: any = null;
   let responderA: any = null;
   let responderB: any = null;
 
@@ -113,8 +115,19 @@
       responderA = await fetchResponderInfo(result.respA);
       responderB = await fetchResponderInfo(result.respB);
     } else {
-      responderA = await fetchResponderInfo(result.winner);
-      responderB = await fetchResponderInfo(result.loser);
+      tempA = await fetchResponderInfo(result.winner);
+      tempB = await fetchResponderInfo(result.loser);
+      console.log("tempA",tempA)
+      console.log("tempB",tempB)
+      if (tempB.vote_count > tempA.vote_count){
+        responderA = tempB;
+        responderB = tempA;
+        console.log(result)
+      } else {
+        responderA = tempA;
+        responderB = tempB;
+        console.log(result)
+      }
     }
   }
 
