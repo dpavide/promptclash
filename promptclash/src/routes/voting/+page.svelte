@@ -26,6 +26,27 @@
   let playersCount = 0;
   let hasVoted = false;
   let votesSubscription: any = null;
+  
+  async function reportResponse(responseId: number) {
+    try {
+      const { error } = await supabase
+        .from("responses")
+        .update({ is_flagged: true })
+        .eq("id", responseId);
+
+      if (error) {
+        alert("Failed to report the response. Please try again later.");
+        return;
+      }
+      alert("Report submitted successfully. Moderators will review it.");
+      responses = responses.map((r) =>
+        r.id === responseId ? { ...r, is_flagged: true } : r
+      );
+    } catch (error) {
+      console.error("Error reporting response:", error);
+      alert("An error occurred while reporting the response.");
+    }
+  }
 
   async function fetchPlayerCount() {
     const { data, error } = await supabase
@@ -229,6 +250,9 @@
           <div class="responses-container">
             {#each responses as r (r.id)}
               <div class="response-card">
+                <div class="report-button-container">
+                  <button class="report-button" on:click={() => reportResponse(r.id)}>❕</button>
+                </div>
                 {#if isImageResponse(r.text)}
                   <div class="image-container">
                     <img
@@ -446,4 +470,33 @@
     font-weight: bold;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
   }
+
+  .report-button {
+  background-color: red;
+  color: white;
+  border: none;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 5px;
+}
+
+.report-button:hover {
+  background-color: #cc0000;
+  transform: translateY(-0.5px);
+}
+
+.report-button-container {
+  position: relative;
+}
+
+
 </style>
