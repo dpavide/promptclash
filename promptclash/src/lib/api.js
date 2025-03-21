@@ -382,65 +382,6 @@ export async function fetchVotesForGame(gameId) {
   return data;
 }
 
-// export async function calculateRoundScores(gameId) {
-//   // 1) Fetch all votes
-//   const votes = await fetchVotesForGame(gameId);
-
-//   // Tally votes by response_id
-//   const voteCounts = {};
-//   votes.forEach(v => {
-//     voteCounts[v.response_id] = (voteCounts[v.response_id] || 0) + 1;
-//   });
-
-//   // 2) Fetch all responses
-//   const responses = await fetchResponsesForGame(gameId);
-
-//   // Group responses by prompt_id
-//   const promptsMap = {}; // key = prompt_id, value = array of response objects
-//   responses.forEach(r => {
-//     if (!promptsMap[r.prompt_id]) promptsMap[r.prompt_id] = [];
-//     // Also store the vote count
-//     r.vote_count = voteCounts[r.id] || 0;
-//     promptsMap[r.prompt_id].push(r);
-//   });
-
-//   // 3) For each prompt, find the highest vote_count
-//   const roundResults = []; // each item: { promptId, winners: [...], maxVotes }
-//   for (const promptId in promptsMap) {
-//     const group = promptsMap[promptId];
-//     let maxVotes = 0;
-//     group.forEach(r => {
-//       if (r.vote_count > maxVotes) maxVotes = r.vote_count;
-//     });
-//     // Collect all winners
-//     const winners = group.filter(r => r.vote_count === maxVotes);
-//     roundResults.push({
-//       promptId: Number(promptId),
-//       winners,
-//       maxVotes
-//     });
-//   }
-
-//   // 4) Update player scores. For each prompt:
-//   // If there's a single winner, we do a bonus = maxVotes * 100 + 50
-//   // If there's a tie, each winner gets maxVotes * 100 (no bonus).
-//   for (const result of roundResults) {
-//     if (result.winners.length > 1) {
-//       // tie scenario
-//       for (const w of result.winners) {
-//         const points = w.vote_count * 100;
-//         await updatePlayerScore(w.player_id, points);
-//       }
-//     } else {
-//       // single winner
-//       const w = result.winners[0];
-//       const points = w.vote_count * 100 + 50;
-//       await updatePlayerScore(w.player_id, points);
-//     }
-//   }
-//   return roundResults;
-// }
-
 export async function calculatePromptScores(gameId, promptId) {
   // 1) fetch the 2 responses for that prompt
   const { data: responses, error: respErr } = await supabase
@@ -467,7 +408,7 @@ export async function calculatePromptScores(gameId, promptId) {
     return { error: "Error fetching votes" };
   }
 
-  // 3) tally
+  // 3) tally votes
   const voteCounts = {};
   for (const v of votes) {
     voteCounts[v.response_id] = (voteCounts[v.response_id] || 0) + 1;
@@ -486,39 +427,29 @@ export async function calculatePromptScores(gameId, promptId) {
     losingResp = { ...respA, vote_count: countA };
   } else if (countA === countB) {
     // tie scenario
-    return { tie: true, respA: { ...respA, vote_count: countA }, respB: { ...respB, vote_count: countB } };
+    return { 
+      tie: true, 
+      respA: { ...respA, vote_count: countA }, 
+      respB: { ...respB, vote_count: countB },
+      pointsA: countA * 100,
+      pointsB: countB * 100
+    };
   }
 
   // 5) awarding points
-  const difference = Math.abs(countA - countB);
-  const bonusPoints = difference * 50;
+  const basePointsA = countA * 100;
+  const basePointsB = countB * 100;
+  const bonusPoints = 50;
 
-  if (bonusPoints > 0) {
-    // fetch winner's current score
-    const { data: profileData, error: profileErr } = await supabase
-      .from('profiles')
-      .select('score, username')
-      .eq('id', winningResp.player_id)
-      .single();
-    if (!profileErr && profileData) {
-      const oldScore = profileData.score || 0;
-      const newScore = oldScore + bonusPoints;
-      const { error: updateErr } = await supabase
-        .from('profiles')
-        .update({ score: newScore })
-        .eq('id', winningResp.player_id);
-      if (!updateErr) {
-        console.log(`Score updated for player ${winningResp.player_id}: +${bonusPoints} points`);
-      }
-    }
-  }
+  // Update scores
+  await updatePlayerScore(winningResp.player_id, basePointsA + bonusPoints);
+  await updatePlayerScore(losingResp.player_id, basePointsB);
 
   return {
     tie: false,
-    winner: winningResp,
-    loser: losingResp,
-    difference,
-    bonusPoints
+    winner: { ...winningResp, points: basePointsA + bonusPoints },
+    loser: { ...losingResp, points: basePointsB },
+    bonusPoints: bonusPoints
   };
 }
 
