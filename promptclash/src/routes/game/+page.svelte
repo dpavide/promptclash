@@ -114,6 +114,15 @@
       }
     }
   }
+  function getCanvasCoords(canvas: HTMLCanvasElement, event: MouseEvent) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+    };
+  }
   async function checkForDrawingContent(): Promise<boolean> {
     if (!canvas) return false;
     const blankCanvas = document.createElement("canvas");
@@ -560,18 +569,16 @@
   }
 
   function handleMouseDown(event: MouseEvent) {
-    if (!ctx) return;
+    if (!ctx || !canvas) return;
     isDrawing = true;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = lineWidth;
-    const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
+    const coords = getCanvasCoords(canvas, event);
     ctx.beginPath();
-    ctx.moveTo(event.clientX - rect.left, event.clientY - rect.top);
+    ctx.moveTo(coords.x, coords.y);
   }
   function handleMouseMove(event: MouseEvent) {
-    if (!isDrawing || !ctx) return;
-    const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
-    ctx.lineTo(event.clientX - rect.left, event.clientY - rect.top);
+    if (!isDrawing || !ctx || !canvas) return;
+    const coords = getCanvasCoords(canvas, event);
+    ctx.lineTo(coords.x, coords.y);
     ctx.stroke();
   }
   function handleMouseUp(event: MouseEvent) {
@@ -672,8 +679,8 @@
     resizeObserver = new ResizeObserver((entries) => {
       if (canvas) {
         // Maintain 1:1 pixel ratio
-        canvas.width = 420;
-        canvas.height = 200;
+        canvas.width = 300;
+        canvas.height = 300;
       }
     });
 
@@ -777,7 +784,9 @@
 
         {#if stage === "prompt"}
           <div class="prompt-container">
-            <p style="font-size: 1.2rem;">Write your own prompt or use a default:</p>
+            <p style="font-size: 1.2rem;">
+              Write your own prompt or use a default:
+            </p>
             <input
               type="text"
               bind:value={promptInput}
@@ -785,10 +794,16 @@
               style="padding: 15px; font-size: 1.2rem; width: 80%; max-width: 600px;"
             />
             <div class="button-group" style="margin-top: 1rem;">
-              <button on:click={() => handleSubmitPrompt(false)}  style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+              <button
+                on:click={() => handleSubmitPrompt(false)}
+                style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+              >
                 Submit Prompt
               </button>
-              <button on:click={() => handleSubmitPrompt(true)}  style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+              <button
+                on:click={() => handleSubmitPrompt(true)}
+                style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+              >
                 Use Default Prompt
               </button>
             </div>
@@ -812,7 +827,9 @@
                   ></textarea>
                   <!-- MOVED SUBMIT BUTTON HERE -->
                   <div class="text-submit-wrapper">
-                    <button on:click={handleSubmitTextResponse} style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+                    <button
+                      on:click={handleSubmitTextResponse}
+                      style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
                       >Submit Text Response</button
                     >
                     <p style={getTimerStyle()}>Time left: {timeLeft}s</p>
@@ -824,7 +841,7 @@
                     data-key={stage}
                     bind:this={canvas}
                     width="420"
-                    height="200"
+                    height="300"
                     on:mousedown={handleMouseDown}
                     on:mousemove={handleMouseMove}
                     on:mouseup={handleMouseUp}
@@ -845,10 +862,16 @@
                       />
                       {lineWidth}px
                     </label>
-                    <button on:click={clearCanvas}  style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+                    <button
+                      on:click={clearCanvas}
+                      style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+                    >
                       Clear
                     </button>
-                    <button on:click={submitDrawing} style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+                    <button
+                      on:click={submitDrawing}
+                      style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+                    >
                       Submit Drawing
                     </button>
                   </div>
@@ -883,7 +906,7 @@
                     data-key={stage}
                     bind:this={canvas}
                     width="420"
-                    height="200"
+                    height="300"
                     on:mousedown={handleMouseDown}
                     on:mousemove={handleMouseMove}
                     on:mouseup={handleMouseUp}
@@ -904,10 +927,16 @@
                       />
                       {lineWidth}px
                     </label>
-                    <button on:click={clearCanvas} style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+                    <button
+                      on:click={clearCanvas}
+                      style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+                    >
                       Clear
                     </button>
-                    <button on:click={submitDrawing} style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+                    <button
+                      on:click={submitDrawing}
+                      style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+                    >
                       Submit Drawing
                     </button>
                   </div>
@@ -968,7 +997,7 @@
   }
 
   @keyframes bgAnimation {
-     0% {
+    0% {
       background-image: url("/backgrounds/bg1.png");
     }
     33% {
@@ -1070,6 +1099,8 @@
     cursor: crosshair;
     display: block;
     margin-bottom: 15px;
+    max-width: 420px;
+    object-fit: contain;
   }
 
   .controls {
