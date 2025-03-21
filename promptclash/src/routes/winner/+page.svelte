@@ -309,10 +309,11 @@
       {/if}
       {#if result}
         {#if result.tie}
-          <div class="sideBySideContainer">
+        <div class="sideBySideContainer">
+          {#if result.tie}
             <!-- First Tied Winner -->
             <div class="resultColumn winnerSection">
-              <div class="pointsDisplay">+{result.bonusPoints}</div>
+              <div class="pointsDisplay">+{result.pointsA}</div>
               <div class="playerImage">
                 <img
                   src={playerHeadImages[responderA?.playerIndex]}
@@ -322,7 +323,7 @@
               <div class="playerTitle">Tied Winner</div>
               <div class="playerName winnerName">{responderA?.username}</div>
             </div>
-
+        
             <!-- Center Prompt -->
             <div class="promptCenter">
               <h2 class="promptText">"{currentPrompt.text}"</h2>
@@ -339,10 +340,10 @@
                 {/if}
               </button>
             </div>
-
+        
             <!-- Second Tied Winner -->
             <div class="resultColumn loserSection">
-              <div class="pointsDisplay">+{result.bonusPoints}</div>
+              <div class="pointsDisplay">+{result.pointsB}</div>
               <div class="playerImage">
                 <img
                   src={playerHeadImages[responderB?.playerIndex]}
@@ -352,13 +353,57 @@
               <div class="playerTitle">Tied Winner</div>
               <div class="playerName loserName">{responderB?.username}</div>
             </div>
-          </div>
+          {:else}
+            <!-- Winner Section -->
+            <div class="resultColumn winnerSection">
+              <div class="pointsDisplay">+{result.winner.points}</div>
+              <div class="playerImage">
+                <img
+                  src={playerHeadImages[responderA?.playerIndex]}
+                  alt="Winner"
+                />
+              </div>
+              <div class="playerTitle">Winner</div>
+              <div class="playerName winnerName">{responderA?.username}</div>
+            </div>
+        
+            <!-- Center Prompt -->
+            <div class="promptCenter">
+              <h2 class="promptText">"{currentPrompt.text}"</h2>
+              <div class="promptAuthor">By: {promptAuthorName}</div>
+              <button
+                on:click={handleReady}
+                disabled={hasPressedReady}
+                style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+              >
+                {#if hasPressedReady}
+                  Waiting for others...
+                {:else}
+                  Next Prompt
+                {/if}
+              </button>
+            </div>
+        
+            <!-- Loser Section -->
+            <div class="resultColumn loserSection">
+              <div class="pointsDisplay">+{result.loser.points}</div>
+              <div class="playerImage">
+                <img
+                  src={playerHeadImages[responderB?.playerIndex]}
+                  alt="Runner-up"
+                />
+              </div>
+              <div class="playerTitle">Second Place</div>
+              <div class="playerName loserName">{responderB?.username}</div>
+            </div>
+          {/if}
+        </div>
         {:else}
           <!-- Existing winner/loser layout remains unchanged -->
           <div class="sideBySideContainer">
             <!-- Winner Section -->
             <div class="resultColumn winnerSection">
-              <div class="pointsDisplay">+{result.bonusPoints}</div>
+              <div class="pointsDisplay">+{result.winner.points}</div>
               <div class="playerImage">
                 <img
                   src={playerHeadImages[responderA?.playerIndex]}

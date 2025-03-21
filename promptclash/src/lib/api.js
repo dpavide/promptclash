@@ -426,7 +426,9 @@ export async function calculatePromptScores(gameId, promptId) {
     winningResp = { ...respB, vote_count: countB };
     losingResp = { ...respA, vote_count: countA };
   } else if (countA === countB) {
-    // tie scenario
+    // Tie scenario: Award 100 points per vote to both, no bonus
+    await updatePlayerScore(respA.player_id, countA * 100);
+    await updatePlayerScore(respB.player_id, countB * 100);
     return { 
       tie: true, 
       respA: { ...respA, vote_count: countA }, 
@@ -436,7 +438,7 @@ export async function calculatePromptScores(gameId, promptId) {
     };
   }
 
-  // 5) awarding points
+  // 5) awarding points for clear winner
   const basePointsA = countA * 100;
   const basePointsB = countB * 100;
   const bonusPoints = 50;
