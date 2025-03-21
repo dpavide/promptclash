@@ -777,11 +777,12 @@
 
         {#if stage === "prompt"}
           <div class="prompt-container">
-            <p>Write your own prompt or use a default:</p>
+            <p style="font-size: 1.2rem;">Write your own prompt or use a default:</p>
             <input
               type="text"
               bind:value={promptInput}
               placeholder="Type something..."
+              style="padding: 15px; font-size: 1.2rem; width: 80%; max-width: 600px;"
             />
             <div class="button-group" style="margin-top: 1rem;">
               <button on:click={() => handleSubmitPrompt(false)}  style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
@@ -903,8 +904,12 @@
                       />
                       {lineWidth}px
                     </label>
-                    <button on:click={clearCanvas}>Clear</button>
-                    <button on:click={submitDrawing}>Submit Drawing</button>
+                    <button on:click={clearCanvas} style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+                      Clear
+                    </button>
+                    <button on:click={submitDrawing} style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;">
+                      Submit Drawing
+                    </button>
                   </div>
                 </div>
               </div>
@@ -963,17 +968,17 @@
   }
 
   @keyframes bgAnimation {
-    0% {
-      background-image: url("backgrounds/bg1.png");
+     0% {
+      background-image: url("/backgrounds/bg1.png");
     }
     33% {
-      background-image: url("backgrounds/bg2.png");
+      background-image: url("/backgrounds/bg2.png");
     }
     66% {
-      background-image: url("backgrounds/bg3.png");
+      background-image: url("/backgrounds/bg3.png");
     }
     100% {
-      background-image: url("backgrounds/bg1.png");
+      background-image: url("/backgrounds/bg1.png");
     }
   }
 
@@ -995,6 +1000,11 @@
     gap: 15px;
   }
 
+  .prompt-container input {
+    font-size: 1.2rem;
+    padding: 15px;
+  }
+
   .response-area {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1013,7 +1023,7 @@
 
   .text-area-wrapper textarea {
     width: 100%;
-    height: 200px;
+    height: 250px;
     min-height: 200px;
     padding: 10px;
     border: 1px solid #ddd;
@@ -1047,16 +1057,16 @@
     margin-left: 20px;
     width: 100%;
     height: auto;
-    min-height: 250px;
+    min-height: 300px;
     background: white;
-    border: 2px solid #000;
-    padding: 10px;
+    border: 3px solid #000;
+    padding: 15px;
     position: relative;
   }
 
   .drawing-area canvas {
     width: 100%;
-    height: 200px;
+    height: 300px;
     cursor: crosshair;
     display: block;
     margin-bottom: 15px;

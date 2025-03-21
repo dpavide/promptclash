@@ -161,8 +161,9 @@
     }
     playerReadiness = {
       ...playerReadiness,
-      [userId]: true,
+      [userId]: true,,
     };
+
 
     const { error } = await supabase
       .from("profiles")
@@ -212,7 +213,7 @@
       )
       .subscribe();
   }
-
+  
   let decorationSet = 0;
   let decorationInterval: any;
   let playerReadiness: Record<string, boolean> = {};
@@ -329,7 +330,11 @@
             <div class="promptCenter">
               <h2 class="promptText">"{currentPrompt.text}"</h2>
               <div class="promptAuthor">By: {promptAuthorName}</div>
-              <button on:click={handleReady} disabled={hasPressedReady}>
+              <button
+                on:click={handleReady}
+                disabled={hasPressedReady}
+                style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+              >
                 {#if hasPressedReady}
                   Waiting for others...
                 {:else}
@@ -549,7 +554,7 @@
     flex-direction: column;
     width: 95vw;
     max-width: 1200px;
-    background-image: url("backgrounds/bg1.png");
+    background-image: url("/backgrounds/bg1.png");
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
@@ -571,7 +576,7 @@
     left: 50%;
     width: 100%;
     height: 100%;
-    background-image: url("backgrounds/bg1.png");
+    background-image: url("/backgrounds/bg1.png");
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
@@ -630,16 +635,16 @@
   }
   @keyframes bgAnimation {
     0% {
-      background-image: url("backgrounds/bg1.png");
+      background-image: url("/backgrounds/bg1.png");
     }
     33% {
-      background-image: url("backgrounds/bg2.png");
+      background-image: url("/backgrounds/bg2.png");
     }
     66% {
-      background-image: url("backgrounds/bg3.png");
+      background-image: url("/backgrounds/bg3.png");
     }
     100% {
-      background-image: url("backgrounds/bg1.png");
+      background-image: url("/backgrounds/bg1.png");
     }
   }
   .vote-button {

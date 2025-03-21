@@ -398,17 +398,17 @@
   }
 
   @keyframes bgAnimation {
-    0% {
-      background-image: url("backgrounds/bg1.png");
+     0% {
+      background-image: url("/backgrounds/bg1.png");
     }
     33% {
-      background-image: url("backgrounds/bg2.png");
+      background-image: url("/backgrounds/bg2.png");
     }
     66% {
-      background-image: url("backgrounds/bg3.png");
+      background-image: url("/backgrounds/bg3.png");
     }
     100% {
-      background-image: url("backgrounds/bg1.png");
+      background-image: url("/backgrounds/bg1.png");
     }
   }
 
