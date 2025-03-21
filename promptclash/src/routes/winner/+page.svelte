@@ -161,9 +161,8 @@
     }
     playerReadiness = {
       ...playerReadiness,
-      [userId]: true,,
+      [userId]: true,
     };
-
 
     const { error } = await supabase
       .from("profiles")
@@ -213,7 +212,7 @@
       )
       .subscribe();
   }
-  
+
   let decorationSet = 0;
   let decorationInterval: any;
   let playerReadiness: Record<string, boolean> = {};
