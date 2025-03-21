@@ -277,7 +277,6 @@
 <style>
   :global(body) {
     margin: 0;
-    overflow-y: hidden;
     padding: 0;
   }
 
@@ -296,7 +295,7 @@
     max-width: 1600px;
     margin: 0 auto;
     margin-top: -400px;
-    aspect-ratio: 1.0;
+    aspect-ratio: 1;
   }
 
   .animated-background {
@@ -357,12 +356,12 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 1rem;
-    padding: 8rem;
-    width: 80%; /* Ensure it doesn't overflow */
-    max-width: 90%; /* Adjust based on your design */
-    margin: 0 auto; /* Center it within the parent */
-    
-}
+    padding: 8rem; /* ← REDUCE THIS TO 2rem */
+    width: 80%;
+    max-width: 90%;
+    margin: 0 auto;
+    overflow: visible; /* ← ADD THIS */
+  }
 
   .response-card {
     background: rgba(255, 255, 255, 0.85);
@@ -374,7 +373,6 @@
     height: 70%; /* Avoid fixed height if content varies */
     margin-top: -100px;
   }
-
 
   .prompt-text {
     color: black;

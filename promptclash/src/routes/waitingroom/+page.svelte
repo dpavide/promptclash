@@ -253,7 +253,9 @@
   >
     {players.length >= 8
       ? "Start Game, Room Full!"
-      : `Start Game (${players.length}/3+)`}
+      : players.length >= 3
+        ? `Start Game (${players.length}/8)`
+        : `Start Game (${players.length}/3+)`}
   </button>
 {:else}
   <p>Waiting for the host to start the game...</p>

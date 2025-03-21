@@ -65,7 +65,7 @@
     "gameCharacters/playerBlueHand.png",
     "gameharacters/playerPurpleHand.png",
     "gamecharacters/playerPinkHand.png",
-  ]
+  ];
 
   // Fetch players so we know how many there are.
   async function fetchPlayers() {
@@ -161,15 +161,15 @@
     }
     playerReadiness = {
       ...playerReadiness,
-      [userId]: true
+      [userId]: true,
     };
-    
+
     const { error } = await supabase
       .from("profiles")
       .update({ ready: true })
       .eq("id", userId)
       .eq("game_id", gameId);
-      
+
     if (error) {
       errorMessage = "Failed to update ready status.";
       console.error("Error updating ready status:", error);
@@ -196,7 +196,7 @@
           // Update local readiness state
           playerReadiness = {
             ...playerReadiness,
-            [payload.new.id]: payload.new.ready
+            [payload.new.id]: payload.new.ready,
           };
 
           const allReady = await checkAllReady();
@@ -212,7 +212,7 @@
       )
       .subscribe();
   }
-  
+
   let decorationSet = 0;
   let decorationInterval: any;
   let playerReadiness: Record<string, boolean> = {};
@@ -257,7 +257,7 @@
     // Set up the realtime subscription to check for ready status.
     setupReadySubscription();
 
-    playerReadiness = Object.fromEntries(players.map(p => [p.id, false]));
+    playerReadiness = Object.fromEntries(players.map((p) => [p.id, false]));
   });
 
   onDestroy(() => {
@@ -267,7 +267,7 @@
     if (gameSubscription) {
       supabase.removeChannel(gameSubscription);
     }
-    if (decorationInterval) clearInterval(decorationInterval);  
+    if (decorationInterval) clearInterval(decorationInterval);
   });
 </script>
 
@@ -278,7 +278,11 @@
   {/if}
   <div class="scoreboard">
     {#each finalScores as player, i}
-      <div class="player-entry">
+      <div
+        class="player-entry color-{players.findIndex(
+          (p) => p.id === player.id
+        ) % 8}"
+      >
         <div class="player-rank">{i + 1}</div>
         <img
           src={playerHeadImages[players.findIndex((p) => p.id === player.id)]}
@@ -294,77 +298,60 @@
   </div>
   <!-- Final mode ready button -->
   <div style="text-align: center; width: 100%;">
-    <a href="/" class="vote-button" style="margin-top: 2rem;">
-      Home
-    </a>
+    <a href="/" class="vote-button" style="margin-top: 2rem;"> Home </a>
   </div>
 {:else if currentPrompt}
   <div class="page-container">
     <div class="frame">
       <h1>Results for Prompt #{promptIndex + 1}</h1>
-      <h2>"{currentPrompt.text}"</h2>
-      <p>Prompt Author: <strong>{promptAuthorName}</strong></p>
       {#if errorMessage}
         <p style="color:red;">{errorMessage}</p>
       {/if}
       {#if result}
         {#if result.tie}
-          <h2>This round's a draw!</h2>
-          <div class="tieContainer">
-            <div class="tieColumn">
-              <div class="tiePoints">+{responderA?.vote_count * 100}</div>
-              <div class="tieImage">
+          <!-- Keep existing tie layout -->
+        {:else}
+          <div class="sideBySideContainer">
+            <!-- Winner Section -->
+            <div class="resultColumn winnerSection">
+              <div class="pointsDisplay">+{result.bonusPoints}</div>
+              <div class="playerImage">
                 <img
                   src={playerHeadImages[responderA?.playerIndex]}
-                  alt="Player"
+                  alt="Winner"
                 />
               </div>
-              <div class="tieName">{responderA?.username}</div>
+              <div class="playerTitle">Winner</div>
+              <div class="playerName winnerName">{responderA?.username}</div>
             </div>
-            <div class="tieColumn">
-              <div class="tiePoints">+{responderB?.vote_count * 100}</div>
-              <div class="tieImage">
+
+            <!-- Center Prompt -->
+            <div class="promptCenter">
+              <h2 class="promptText">"{currentPrompt.text}"</h2>
+              <div class="promptAuthor">By: {promptAuthorName}</div>
+              <button on:click={handleReady} disabled={hasPressedReady}>
+                {#if hasPressedReady}
+                  Waiting for others...
+                {:else}
+                  Next Prompt
+                {/if}
+              </button>
+            </div>
+
+            <!-- Loser Section -->
+            <div class="resultColumn loserSection">
+              <div class="pointsDisplay">+{responderB?.vote_count * 100}</div>
+              <div class="playerImage">
                 <img
                   src={playerHeadImages[responderB?.playerIndex]}
-                  alt="Player"
+                  alt="Runner-up"
                 />
               </div>
-              <div class="tieName">{responderB?.username}</div>
+              <div class="playerTitle">Second Place</div>
+              <div class="playerName loserName">{responderB?.username}</div>
             </div>
-          </div>
-          <p>No bonus points awarded in a tie.</p>
-        {:else}
-          <div class="winnerColumn">
-            <div class="winnerPoints"><br /><br />+{result.bonusPoints}</div>
-            <div class="winnerImage">
-              <img
-                src={playerHeadImages[responderA?.playerIndex]}
-                alt="Winner"
-              />
-            </div>
-            <div class="winnerName">Winner:<br />{responderA?.username}</div>
-          </div>
-          <div class="loserColumn">
-            <div class="loserPoints">
-              <br /><br />+{responderB?.vote_count * 100}
-            </div>
-            <div class="loserImage">
-              <img
-                src={playerHeadImages[responderB?.playerIndex]}
-                alt="Loser"
-              />
-            </div>
-            <div class="loserName">2nd:<br />{responderB?.username}</div>
           </div>
         {/if}
-        <!-- Ready button for non-final mode -->
-        <button on:click={handleReady} disabled={hasPressedReady}>
-          {#if hasPressedReady}
-            Waiting for others...
-          {:else}
-            Next Prompt
-          {/if}
-        </button>
       {:else}
         <p>Loading results...</p>
       {/if}
@@ -389,7 +376,9 @@
   <div class="decorations">
     {#each players as player, i}
       <img
-        src={playerReadiness[player.id] ? playerHandImages[i] : playerIdleImages[i]}
+        src={playerReadiness[player.id]
+          ? playerHandImages[i]
+          : playerIdleImages[i]}
         alt="Player status"
         class="player-status"
       />
@@ -406,7 +395,7 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    width: 80%;
+    width: 100%;
     max-width: 600px;
     margin: 2rem auto;
   }
@@ -415,9 +404,9 @@
     align-items: center;
     gap: 1.5rem;
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.9);
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    color: white;
   }
   .player-avatar {
     width: 60px;
@@ -437,6 +426,14 @@
     color: #666;
     font-size: 0.9rem;
   }
+  .sideBySideContainer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    margin: 2rem 0;
+  }
   .player-rank {
     font-size: 1.5rem;
     font-weight: bold;
@@ -453,7 +450,98 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100vh;
+    min-height: 100vh;
+    padding: 10px;
+    overflow-y: auto;
+  }
+  .promptCenter {
+    flex: 0 1 40%;
+    text-align: center;
+    padding: 0 2rem;
+  }
+  .playerImage img {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    margin: 1rem 0;
+  }
+  .pointsDisplay {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #4a90e2;
+    margin: 1rem 0;
+  }
+  .winnerSection {
+    margin-left: auto;
+    align-items: flex-end;
+    text-align: right;
+  }
+  .winnerSection .playerImage {
+    margin-right: -200px;
+  }
+  .winnerSection .pointsDisplay {
+    margin-left: 175px;
+    margin-top: -100px;
+  }
+  .winnerSection .winnerName {
+    margin-left: 0px;
+  }
+  .loserSection {
+    margin-right: auto;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .loserSection .playerImage {
+    margin-right: 200px;
+  }
+  .loserSection .pointsDisplay {
+    margin-left: -175px;
+    margin-top: -100px;
+  }
+  .playerTitle {
+    font-size: 1.5rem;
+    margin: 0.5rem 0;
+    color: #333;
+  }
+
+  .playerName {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #222;
+  }
+
+  .promptText {
+    font-size: 1.8rem;
+    margin: 2rem 0;
+    color: #333;
+  }
+
+  .promptAuthor {
+    font-size: 1.2rem;
+    color: #666;
+    margin-bottom: 2rem;
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 768px) {
+    .sideBySideContainer {
+      flex-direction: column;
+    }
+
+    .resultColumn {
+      margin: 2rem 0;
+    }
+
+    .promptCenter {
+      order: -1;
+      width: 100%;
+      padding: 0;
+    }
+
+    .playerImage img {
+      width: 80px;
+      height: 80px;
+    }
   }
   .frame {
     --frame-scale: 1.2;
@@ -466,11 +554,39 @@
     background-repeat: no-repeat;
     background-position: center;
     animation: bgAnimation 1.5s infinite;
-    justify-content: space-around;
+    justify-content: flex-start !important;
     align-items: center;
-    transform: scale(var(--frame-scale));
-    margin-bottom: 10px;
-    padding: 1rem;
+    margin-bottom: 20px;
+    margin-top: -30px;
+    padding: 5rem;
+    padding-top: 0;
+    position: relative;
+    overflow: visible;
+    background: none !important; /* Remove original background */
+  }
+  .frame::before {
+    content: "";
+    position: absolute;
+    top: 60%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    background-image: url("backgrounds/bg1.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    transform: translate(-50%, -50%) scale(1.5); /* Adjust scale here */
+    z-index: -1;
+    animation: bgAnimation 1.5s infinite;
+  }
+  .frame > h1 {
+    margin: 55px 0 5px 0 !important;
+  }
+  .resultColumn {
+    flex: 0 1 55%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
   .winnerColumn,
   .loserColumn,
@@ -480,15 +596,16 @@
     text-align: center;
     align-items: center;
     margin: 1rem;
+    margin-top: 20px;
   }
   .winnerImage img,
   .loserImage img,
   .tieImage img {
-    width: 100%;
-    max-width: 100px;
+    max-width: 100%;
     height: auto;
-    display: block;
-    margin: auto;
+    margin: 0 auto -20px;
+    position: relative;
+    top: -65px;
   }
   .decorations {
     position: fixed;
@@ -507,7 +624,6 @@
   .player-status:hover {
     transform: translateY(-10px);
   }
-
   .decorations img {
     max-width: 150px;
     height: auto;
@@ -527,7 +643,6 @@
     }
   }
   .vote-button {
-    /* Existing button styles */
     background-color: #0056b3;
     color: white;
     border: none;
@@ -536,18 +651,101 @@
     cursor: pointer;
     transition: all 0.2s ease;
     font-size: 1.1rem;
-    
-    /* Add these for anchor elements */
     display: inline-block;
     text-decoration: none;
     text-align: center;
     line-height: normal;
   }
-
-  /* Add specific anchor button hover state */
   a.vote-button:hover {
     background-color: #0056b3;
     transform: translateY(-1px);
     text-decoration: none;
+  }
+  .winnerColumn,
+  .loserColumn {
+    width: 100%;
+    max-width: 100px;
+    margin: 1rem auto;
+  }
+  .tieContainer {
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+  .tieColumn {
+    width: 100%;
+    max-width: 250px;
+    margin: 1rem 0;
+  }
+  @media (min-width: 768px) {
+    .winnerColumn,
+    .loserColumn {
+      margin: 1rem;
+    }
+    .tieContainer {
+      flex-direction: row;
+      justify-content: center;
+      gap: 2rem;
+    }
+    .tieColumn {
+      max-width: 300px;
+    }
+  }
+  .winnerImage img,
+  .loserImage img,
+  .tieImage img {
+    max-width: 80%;
+    height: auto;
+    margin: 0 auto;
+  }
+  .winnerName,
+  .loserName,
+  .tieName {
+    font-size: clamp(1rem, 3vw, 1.2rem);
+    padding: 0.5rem;
+    margin-top: 10px;
+    margin-top: -15px !important;
+    padding-top: 0;
+    position: relative;
+    top: -50px;
+  }
+  .resultsContainer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    margin-top: -10px !important;
+  }
+  .player-entry.color-0 {
+    background-color: #ff4b4b;
+  }
+  .player-entry.color-1 {
+    background-color: #ffa500;
+  }
+  .player-entry.color-2 {
+    background-color: #ffeb3b;
+    color: #000;
+  }
+  .player-entry.color-3 {
+    background-color: #4caf50;
+  }
+  .player-entry.color-4 {
+    background-color: #009688;
+  }
+  .player-entry.color-5 {
+    background-color: #2196f3;
+  }
+  .player-entry.color-6 {
+    background-color: #9c27b0;
+  }
+  .player-entry.color-7 {
+    background-color: #e91e63;
+  }
+  .color-2 .username,
+  .color-2 .score {
+    color: #000 !important;
   }
 </style>
