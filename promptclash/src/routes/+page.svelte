@@ -5,9 +5,22 @@
 
   let username = "";
   let roomCode = "";
+  let loading = false;
+
+
 
   // Create Room: Sign in, create a new game, add the user, and redirect.
+  function clickCreateRoom() {
+    handleCreateRoom();
+    loading = true;
+  }
+  function clickJoinGame() {
+    handleJoinGame();
+    loading = true;
+  }
+
   async function handleCreateRoom() {
+    if (loading) return;
     if (!username.trim()) {
       alert("Please enter a username");
       return;
@@ -17,13 +30,15 @@
       alert("Inappropriate username, you can't join the lobby.");
       return; // block them from proceeding
     }
+
     try {
+
       // Sign in anonymously
       const { data: authData, error: authError } =
         await supabase.auth.signInAnonymously();
       if (authError) {
         console.error("Error during anonymous sign-in:", authError);
-        alert("Failed to sign in. Please try again.");
+        alert("Too many signin attempts, try again shortly");
         return;
       }
 
@@ -57,11 +72,14 @@
     } catch (error) {
       console.error("Error in handleCreateRoom:", error);
       alert("An unexpected error occurred. Please try again.");
+    } finally {
+      loading = false; // Re-enable the button once the operation is complete
     }
   }
 
   // Join Game: Validate room code, sign in, add the user to that game, and redirect.
   async function handleJoinGame() {
+    if (loading) return;
     if (!username.trim()) {
       alert("Please enter a username");
       return;
@@ -75,7 +93,9 @@
       alert("Inappropriate username, you can't join the lobby.");
       return; // block them
     }
+
     try {
+
       // Look up the game by its ID (the room code)
       const { data: game, error } = await supabase
         .from("game")
@@ -114,7 +134,7 @@
         await supabase.auth.signInAnonymously();
       if (authError) {
         console.error("Error during anonymous sign-in:", authError);
-        alert("Failed to sign in. Please try again.");
+        alert("Too many join attempts, try again shortly");
         return;
       }
 
@@ -137,6 +157,8 @@
     } catch (error) {
       console.error("Error in handleJoinGame:", error);
       alert("An unexpected error occurred. Please try again.");
+    } finally {
+      loading = false; // Re-enable the button once the operation is complete
     }
   }
 </script>
@@ -187,7 +209,7 @@
           class="room-input"
           required
         />
-        <button class="play-button" on:click={handleJoinGame}>
+        <button class="play-button" on:click={clickJoinGame} disabled={loading}>
           Join Game
         </button>
       </div>
@@ -198,7 +220,7 @@
       >
 
       <!-- Create Room Button -->
-      <button class="play-button" on:click={handleCreateRoom}>
+      <button class="play-button" on:click={clickCreateRoom} disabled={loading}>
         Create Room
       </button>
     </div>

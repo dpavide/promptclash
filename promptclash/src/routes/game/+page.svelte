@@ -33,6 +33,7 @@
   let assignedPrompt: any = null;
   let responseInput = "";
   let responseIndex = 0;
+  let loading = false;
 
   // For subscription logic:
   let unsubscribeCount: any;
@@ -101,6 +102,24 @@
       ctx.strokeStyle = color;
       ctx.lineWidth = lineWidth;
     }
+  }
+
+  function clickSubmitPrompt(status) {
+    handleSubmitPrompt(status);
+    loading = true;
+  }
+  function clickSubmitTextResponse() {
+        // Text-specific validation
+    if (!responseInput.trim()) {
+      errorMessage = "Text response cannot be empty.";
+      return;
+    }
+    handleSubmitTextResponse();
+    loading = true;
+  }
+  function clickSubmitDrawing() {
+    submitDrawing();
+    loading = true;
   }
 
   function initialiseCanvas() {
@@ -341,6 +360,8 @@
     } catch (err) {
       console.error("Error submitting prompt:", err);
       errorMessage = "Failed to submit prompt. Please try again.";
+    } finally {
+      loading = false; // Re-enable the button once the operation is complete
     }
   }
 
@@ -402,12 +423,6 @@
       return;
     }
 
-    // Text-specific validation
-    if (!responseInput.trim()) {
-      errorMessage = "Text response cannot be empty.";
-      return;
-    }
-
     const targetPrompt = assignedPrompts[responseIndex];
     if (!targetPrompt) {
       errorMessage = "Could not find the assigned prompt to answer.";
@@ -441,6 +456,8 @@
     } catch (err) {
       console.error("Error submitting text response:", err);
       errorMessage = "Failed to submit text response. Please try again.";
+    } finally {
+      loading = false; // Re-enable the button once the operation is complete
     }
   }
 
@@ -522,6 +539,8 @@
       console.error("Error submitting drawing:", err);
       errorMessage =
         "Failed to submit drawing. Please check console for details.";
+      } finally {
+      loading = false; // Re-enable the button once the operation is complete
     }
   }
 
@@ -795,13 +814,13 @@
             />
             <div class="button-group" style="margin-top: 1rem;">
               <button
-                on:click={() => handleSubmitPrompt(false)}
+                on:click={() => clickSubmitPrompt(false)}  disabled={loading}
                 style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
               >
                 Submit Prompt
               </button>
               <button
-                on:click={() => handleSubmitPrompt(true)}
+                on:click={() => clickSubmitPrompt(true)}  disabled={loading}
                 style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
               >
                 Use Default Prompt
@@ -828,7 +847,7 @@
                   <!-- MOVED SUBMIT BUTTON HERE -->
                   <div class="text-submit-wrapper">
                     <button
-                      on:click={handleSubmitTextResponse}
+                      on:click={clickSubmitTextResponse} disabled={loading}
                       style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
                       >Submit Text Response</button
                     >
@@ -869,7 +888,7 @@
                       Clear
                     </button>
                     <button
-                      on:click={submitDrawing}
+                      on:click={clickSubmitDrawing}  disabled={loading}
                       style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
                     >
                       Submit Drawing
@@ -894,7 +913,7 @@
                   ></textarea>
                   <!-- MOVED SUBMIT BUTTON HERE -->
                   <div class="text-submit-wrapper">
-                    <button on:click={handleSubmitTextResponse}
+                    <button on:click={clickSubmitTextResponse}  disabled={loading}
                       >Submit Text Response</button
                     >
                     <p style={getTimerStyle()}>Time left: {timeLeft}s</p>
@@ -934,7 +953,7 @@
                       Clear
                     </button>
                     <button
-                      on:click={submitDrawing}
+                      on:click={clickSubmitDrawing}  disabled={loading}
                       style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
                     >
                       Submit Drawing
