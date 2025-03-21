@@ -12,6 +12,7 @@
   let gameId = 0;
   let promptIndex: number = 0;
   let currentPrompt: any = null;
+  let loading = false;
 
   let responses: Array<{
     id: number;
@@ -27,6 +28,11 @@
   let hasVoted = false;
   let votesSubscription: any = null;
   
+  function clickVote(id, player_id) {
+    handleVote(id, player_id);
+    loading = true;
+  }
+
   async function reportResponse(responseId: number) {
     try {
       const { error } = await supabase
@@ -278,7 +284,7 @@
                 {:else}
                   <button
                     class="vote-button"
-                    on:click={() => handleVote(r.id, r.player_id)}
+                    on:click={() => clickVote(r.id, r.player_id)}
                   >
                     Vote
                   </button>
