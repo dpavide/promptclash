@@ -63,8 +63,8 @@
     "gameCharacters/playerLightGreenHand.png",
     "gameCharacters/playerDarkGreenHand.png",
     "gameCharacters/playerBlueHand.png",
-    "gameharacters/playerPurpleHand.png",
-    "gamecharacters/playerPinkHand.png",
+    "gameCharacters/playerPurpleHand.png",
+    "gameCharacters/playerPinkHand.png",
   ];
 
   // Fetch players so we know how many there are.
