@@ -309,8 +309,52 @@
       {/if}
       {#if result}
         {#if result.tie}
-          <!-- Keep existing tie layout -->
+          <div class="sideBySideContainer">
+            <!-- First Tied Winner -->
+            <div class="resultColumn winnerSection">
+              <div class="pointsDisplay">+{result.bonusPoints}</div>
+              <div class="playerImage">
+                <img
+                  src={playerHeadImages[responderA?.playerIndex]}
+                  alt="Tied Winner"
+                />
+              </div>
+              <div class="playerTitle">Tied Winner</div>
+              <div class="playerName winnerName">{responderA?.username}</div>
+            </div>
+
+            <!-- Center Prompt -->
+            <div class="promptCenter">
+              <h2 class="promptText">"{currentPrompt.text}"</h2>
+              <div class="promptAuthor">By: {promptAuthorName}</div>
+              <button
+                on:click={handleReady}
+                disabled={hasPressedReady}
+                style="background-color: #0077cc; color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem;"
+              >
+                {#if hasPressedReady}
+                  Waiting for others...
+                {:else}
+                  Next Prompt
+                {/if}
+              </button>
+            </div>
+
+            <!-- Second Tied Winner -->
+            <div class="resultColumn loserSection">
+              <div class="pointsDisplay">+{result.bonusPoints}</div>
+              <div class="playerImage">
+                <img
+                  src={playerHeadImages[responderB?.playerIndex]}
+                  alt="Tied Winner"
+                />
+              </div>
+              <div class="playerTitle">Tied Winner</div>
+              <div class="playerName loserName">{responderB?.username}</div>
+            </div>
+          </div>
         {:else}
+          <!-- Existing winner/loser layout remains unchanged -->
           <div class="sideBySideContainer">
             <!-- Winner Section -->
             <div class="resultColumn winnerSection">
@@ -501,6 +545,19 @@
   .loserSection .pointsDisplay {
     margin-left: -175px;
     margin-top: -100px;
+  }
+  .resultColumn.winnerSection .playerTitle,
+  .resultColumn.loserSection .playerTitle {
+    color: #4a90e2;
+  }
+
+  .tieName {
+    font-size: clamp(1rem, 3vw, 1.2rem);
+    padding: 0.5rem;
+    margin-top: -15px !important;
+    padding-top: 0;
+    position: relative;
+    top: -50px;
   }
   .playerTitle {
     font-size: 1.5rem;

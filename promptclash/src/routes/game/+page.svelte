@@ -209,7 +209,7 @@
     } else if (timeLeft <= 15) {
       return "color: orange;";
     } else if (timeLeft <= 30) {
-      return "color: yellow;";
+      return "color: #F2CE3E;";
     } else {
       return "color: black;";
     }
@@ -836,13 +836,15 @@
         {:else if stage === "response1"}
           {#if assignedPrompts.length > 0}
             <div class="prompt-container">
-              <p><strong>Prompt #1</strong>:</p>
+              <h3 style="color: white; font-size: 1.4rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.5); margin: 15px 0; text-align: center;">
+                PROMPT #1
+              </h3>
               <p><em>{assignedPrompts[0].text}</em></p>
               <div class="response-area">
                 <div class="text-area-wrapper">
                   <textarea
                     bind:value={responseInput}
-                    placeholder="Type your response for prompt #1..."
+                    placeholder="Type your response..."
                   ></textarea>
                   <!-- MOVED SUBMIT BUTTON HERE -->
                   <div class="text-submit-wrapper">
@@ -903,7 +905,9 @@
         {:else if stage === "response2"}
           {#if assignedPrompts.length > 1}
             <div class="prompt-container">
-              <p><strong>Prompt #2</strong>:</p>
+              <h3 style="color: white; font-size: 1.4rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.5); margin: 15px 0; text-align: center;">
+                PROMPT #2
+              </h3>
               <p><em>{assignedPrompts[1].text}</em></p>
               <div class="response-area">
                 <div class="text-area-wrapper">
