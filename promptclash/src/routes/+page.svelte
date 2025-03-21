@@ -326,12 +326,12 @@
     padding: 10px 20px;
     font-size: 1.2em;
     color: white;
-    background-color: #0056b3;
+    background-color: #0077cc;
     border: none;
     border-radius: 5px;
     cursor: pointer;
   }
   .play-button:hover {
-    background-color: #0056b3;
+    background-color: #0077cc;
   }
 </style>
