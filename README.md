@@ -50,11 +50,3 @@ git clone https://github.com/dpavide/promptclash.git
 cd promptclash
 npm install
 npm run dev
-
-## 🔑 Environment Variables
-
-Create a `.env` file in the root directory with the following keys:
-
-```env
-PUBLIC_SUPABASE_URL=your_supabase_url
-PUBLIC_SUPABASE_ANON_KEY=your_anon_key
