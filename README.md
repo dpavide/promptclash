@@ -1,45 +1,49 @@
 # 🎮 Prompt Clash
 
-A real-time multiplayer web party game where players respond to quirky prompts, then vote for their favorite answers — built with **SvelteKit**, **Supabase**, and **AWS**.
+A real-time multiplayer web party game where players respond to creative prompts and vote for the best responses — built with **SvelteKit**, **Supabase**, and **AWS**.
 
-![demo](./demo.gif) <!-- add a GIF or screenshot here -->
-
----
-
-## 🚀 Live Demo
-
-🌐 [Try it out at promptclash.xyz](https://promptclash.xyz)
+![Prompt Clash Demo](./demo.gif)
 
 ---
 
-## 🛠 Tech Stack
+## 🌍 Live Demo
 
-- **Frontend:** SvelteKit, TypeScript, Tailwind
-- **Backend-as-a-Service:** Supabase (Auth, Realtime DB, Subscriptions)
-- **Database:** PostgreSQL
-- **Deployment:** AWS EC2, Caddy, Route53 DNS
+▶️ [promptclash.xyz](https://promptclash.xyz)
 
 ---
 
-## 🧩 Features
+## 🧠 About
 
-- 🔒 Real-time multiplayer room creation with Supabase subscriptions  
-- ✍️ Prompt-based input and voting mechanics  
-- 🎨 Responsive UI with dynamic state updates  
-- 🔁 Session management with live game syncing  
-- 🧠 Auth via Supabase + scoring logic  
+Built from scratch by a team of 6 as a Year 1 university project, Prompt Clash supports up to 8 players per game session, syncing live state across all users via Supabase's real-time subscriptions.
+
+I led backend development, real-time syncing logic, and deployment on AWS.
 
 ---
 
-## 📸 Screenshots
+## ⚙️ Tech Stack
 
-| Lobby                            | Voting Phase                     | Winner Reveal                  |
-|----------------------------------|----------------------------------|--------------------------------|
-| ![lobby](./screenshots/lobby.png) | ![voting](./screenshots/voting.png) | ![winner](./screenshots/winner.png) |
+| Layer       | Stack                                       |
+|-------------|---------------------------------------------|
+| Frontend    | SvelteKit, TypeScript, Tailwind             |
+| Backend     | Supabase (Auth, DB, Realtime Subscriptions) |
+| Database    | PostgreSQL                                  |
+| Deployment  | AWS EC2, Caddy Reverse Proxy, Route53 DNS   |
 
 ---
 
-## 📦 Run Locally
+## 🚀 Features
+
+- 🔒 Authenticated multiplayer rooms (up to 8 players)
+- ✍️ Custom prompt-based input & voting system
+- 🔄 Real-time game state updates using Supabase Realtime
+- ⚡ Live session management with auto-refresh
+- 💻 Fully responsive UI
+
+---
+
+## 🖥 Run Locally
+
+Clone the repo and start the dev server:
 
 ```bash
 git clone https://github.com/dpavide/promptclash.git
